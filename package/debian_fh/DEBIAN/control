@@ -1,0 +1,7 @@
+Package: ecollector
+Version: 0.10.6
+Section: non-free/misc
+Priority: optional
+Architecture: armhf
+Maintainer: Aleksandrs Livincovs <aleksandrs.livincovs@gmail.com>
+Description: ecollector futurehome adapter.

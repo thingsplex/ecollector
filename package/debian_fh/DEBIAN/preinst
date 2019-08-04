@@ -1,0 +1,21 @@
+#!/bin/sh
+set -e
+
+if [ -d /run/systemd/system ]; then
+  systemctl --system daemon-reload >/dev/null || true
+fi
+
+if [ "$1" = "remove" ]; then
+  if [ -x "/usr/bin/deb-systemd-helper" ]; then
+    deb-systemd-helper mask ecollector.service >/dev/null
+  fi
+fi
+
+if [ "$1" = "purge" ]; then
+  rm -rf /var/lib/futurehome/ecollector/data
+  
+  if [ -x "/usr/bin/deb-systemd-helper" ]; then
+    deb-systemd-helper purge ecollector.service >/dev/null
+    deb-systemd-helper unmask ecollector.service >/dev/null
+  fi
+fi

@@ -1,0 +1,31 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = "configure" ]
+then
+  groupadd -r thingsplex || true
+  groupadd -r ecollector || true
+
+  useradd -r -N -M -d / -s /bin/false -g thingsplex ecollector || true
+
+  chown -R ecollector:thingsplex /var/log/thingsplex/ecollector/ || true
+  chown -R ecollector:ecollector /opt/thingsplex/ecollector/ || true
+fi
+
+deb-systemd-helper unmask ecollector.service >/dev/null || true
+
+if deb-systemd-helper --quiet was-enabled ecollector.service; then
+  deb-systemd-helper enable ecollector.service >/dev/null || true
+else
+  deb-systemd-helper update-state ecollector.service >/dev/null || true
+fi
+
+if [ -d /run/systemd/system ]; then
+  systemctl --system daemon-reload >/dev/null || true
+
+  if [ -n "$2" ]; then
+    deb-systemd-invoke try-restart ecollector.service >/dev/null || true
+  else
+    deb-systemd-invoke start ecollector.service >/dev/null || true
+  fi
+fi

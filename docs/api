@@ -1,0 +1,260 @@
+
+Request :
+{
+  "type": "cmd.tsdb.query",
+  "serv": "ecollector",
+  "val_t": "str_map",
+  "val": {
+    "query": "SELECT count(\"value\") AS \"count_value\" FROM \"default_20w\".\"sensor_presence.evt.presence.report\" WHERE  topic='pt:j1/mt:evt/rt:dev/rn:zw/ad:1/sv:sensor_presence/ad:9_0' GROUP BY time(30m) FILL(null)"
+  },
+  "tags": null,
+  "props": null,
+  "ver": "1",
+  "corid": "",
+  "src": "tplex-ui",
+  "ctime": "2019-08-03T21:57:58.929+08:00",
+  "uid": "8daaa2c6-62ca-4e31-b73b-38258aa22750"
+}
+Report :
+
+
+pt:j1/mt:evt/rt:app/rn:ecollector/ad:1
+{
+  "type": "evt.tsdb.query_report",
+  "serv": "ecollector",
+  "val_t": "object",
+  "val": {
+    "Results": [
+      {
+        "Series": [
+          {
+            "name": "sensor_presence.evt.presence.report",
+            "columns": [
+              "time",
+              "count_value"
+            ],
+            "values": [
+              [
+                1564862400000,
+                3
+              ],
+              [
+                1564864200000,
+                11
+              ],
+              [
+                1564866000000,
+                22
+              ],
+              [
+                1564867800000,
+                21
+              ],
+              [
+                1564869600000,
+                22
+              ],
+              [
+                1564871400000,
+                20
+              ],
+              [
+                1564873200000,
+                21
+              ],
+              [
+                1564875000000,
+                21
+              ],
+              [
+                1564876800000,
+                14
+              ],
+              [
+                1564878600000,
+                0
+              ],
+              [
+                1564880400000,
+                0
+              ],
+              [
+                1564882200000,
+                0
+              ],
+              [
+                1564884000000,
+                0
+              ],
+              [
+                1564885800000,
+                0
+              ],
+              [
+                1564887600000,
+                0
+              ],
+              [
+                1564889400000,
+                0
+              ],
+              [
+                1564891200000,
+                0
+              ],
+              [
+                1564893000000,
+                0
+              ],
+              [
+                1564894800000,
+                0
+              ],
+              [
+                1564896600000,
+                0
+              ],
+              [
+                1564898400000,
+                0
+              ],
+              [
+                1564900200000,
+                0
+              ],
+              [
+                1564902000000,
+                1
+              ],
+              [
+                1564903800000,
+                0
+              ],
+              [
+                1564905600000,
+                0
+              ],
+              [
+                1564907400000,
+                1
+              ],
+              [
+                1564909200000,
+                12
+              ],
+              [
+                1564911000000,
+                14
+              ],
+              [
+                1564912800000,
+                1
+              ],
+              [
+                1564914600000,
+                5
+              ],
+              [
+                1564916400000,
+                0
+              ],
+              [
+                1564918200000,
+                0
+              ],
+              [
+                1564920000000,
+                15
+              ]
+            ]
+          }
+        ],
+        "Messages": null
+      }
+    ]
+  },
+  "tags": null,
+  "props": null,
+  "ver": "1",
+  "corid": "8daaa2c6-62ca-4e31-b73b-38258aa22750",
+  "ctime": "2019-08-04T14:27:35.387+08:00",
+  "uid": "bc687fbf-03bf-4366-8035-b1ab4e8f89b3"
+}
+
+Error response :
+
+{
+  "type": "evt.tsdb.query_report",
+  "serv": "ecollector",
+  "val_t": "object",
+  "val": {
+    "Results": null,
+    "error": "error parsing query: found GROUPa, expected ; at line 1, char 169"
+  },
+  "tags": null,
+  "props": null,
+  "ver": "1",
+  "corid": "8daaa2c6-62ca-4e31-b73b-38258aa22750",
+  "ctime": "2019-08-04T15:05:11.982+08:00",
+  "uid": "9c0f2721-14b4-4b5a-bfcd-9618621288b2"
+}
+
+Request
+
+{
+  "type": "cmd.tsdb.get_measurements",
+  "serv": "ecollector",
+  "val_t": "str_map",
+  "val": {
+    "proc_id": "1"
+  },
+  "tags": null,
+  "props": null,
+  "ver": "1",
+  "corid": "",
+  "src": "tplex-ui",
+  "ctime": "2019-08-03T21:57:58.929+08:00",
+  "uid": "8daaa2c6-62ca-4e31-b73b-38258aa22750"
+}
+
+Response :
+
+{
+  "type": "evt.tsdb.measurements_report",
+  "serv": "ecollector",
+  "val_t": "str_array",
+  "val": [
+    "alarm_gp.evt.alarm.report",
+    "angrydog.evt.alert.sys_report",
+    "basic.evt.lvl.report",
+    "battery.evt.lvl.report",
+    "dev_sys.evt.state.report",
+    "kind-owl.evt.notification.report",
+    "out_bin_switch.evt.binary.report",
+    "out_lvl_switch.cmd.binary.set",
+    "out_lvl_switch.cmd.lvl.set",
+    "out_lvl_switch.evt.binary.report",
+    "out_lvl_switch.evt.lvl.report",
+    "scene_ctrl.evt.scene.report",
+    "sensor_humid.evt.sensor.report",
+    "sensor_lumin.evt.sensor.report",
+    "sensor_presence.evt.presence.report",
+    "sensor_temp.evt.sensor.report",
+    "sensor_uv.evt.sensor.report",
+    "tpflow.cmd.registry.get_service",
+    "tpflow.cmd.registry.get_services",
+    "tpflow.cmd.registry.get_things",
+    "tpflow.evt.registry.services_report",
+    "tpflow.evt.registry.things_report",
+    "vinculum.cmd.pd7.request",
+    "vinculum.evt.pd7.notify",
+    "zwave-ad.cmd.ping.send",
+    "zwave-ad.evt.ping.report"
+  ],
+  "tags": null,
+  "props": null,
+  "ver": "1",
+  "corid": "8daaa2c6-62ca-4e31-b73b-38258aa22750",
+  "ctime": "2019-08-04T14:54:12.754+08:00",
+  "uid": "4d110e44-1fc3-4b12-9f95-eb9cc84c0309"
+}

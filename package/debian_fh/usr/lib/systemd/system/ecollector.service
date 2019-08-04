@@ -1,0 +1,14 @@
+[Unit]
+Description=ecollector
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/ecollector -c /etc/futurehome/ecollector/config.json
+User=ecollector
+WorkingDirectory=/var/lib/futurehome/ecollector
+Restart=always
+StandardOutput=null
+StandardError=null
+
+[Install]
+WantedBy=multi-user.target
