@@ -1,4 +1,4 @@
-
+pt:j1/mt:cmd/rt:app/rn:ecollector/ad:1
 Request :
 {
   "type": "cmd.tsdb.query",
@@ -180,6 +180,127 @@ pt:j1/mt:evt/rt:app/rn:ecollector/ad:1
   "ctime": "2019-08-04T14:27:35.387+08:00",
   "uid": "bc687fbf-03bf-4366-8035-b1ab4e8f89b3"
 }
+
+Another example :
+
+Req:
+{
+  "type": "cmd.tsdb.query",
+  "serv": "ecollector",
+  "val_t": "str_map",
+  "val": {
+    "query": "SELECT last(value) AS count_value FROM \"default_20w\".\"sensor_presence.evt.presence.report\" GROUP BY location_id  FILL(null)"
+  },
+  "tags": null,
+  "props": null,
+  "ver": "1",
+  "corid": "",
+  "src": "tplex-ui",
+  "ctime": "2019-08-03T21:57:58.929+08:00",
+  "uid": "8daaa2c6-62ca-4e31-b73b-38258aa22750"
+
+Response:
+{
+  "type": "evt.tsdb.query_report",
+  "serv": "ecollector",
+  "val_t": "object",
+  "val": {
+    "Results": [
+      {
+        "Series": [
+          {
+            "name": "sensor_presence.evt.presence.report",
+            "tags": {
+              "location_id": ""
+            },
+            "columns": [
+              "time",
+              "count_value"
+            ],
+            "values": [
+              [
+                1565007319243,
+                true
+              ]
+            ]
+          },
+          {
+            "name": "sensor_presence.evt.presence.report",
+            "tags": {
+              "location_id": "1"
+            },
+            "columns": [
+              "time",
+              "count_value"
+            ],
+            "values": [
+              [
+                1565001602624,
+                false
+              ]
+            ]
+          },
+          {
+            "name": "sensor_presence.evt.presence.report",
+            "tags": {
+              "location_id": "2"
+            },
+            "columns": [
+              "time",
+              "count_value"
+            ],
+            "values": [
+              [
+                1565006664485,
+                false
+              ]
+            ]
+          },
+          {
+            "name": "sensor_presence.evt.presence.report",
+            "tags": {
+              "location_id": "5"
+            },
+            "columns": [
+              "time",
+              "count_value"
+            ],
+            "values": [
+              [
+                1565006655689,
+                false
+              ]
+            ]
+          },
+          {
+            "name": "sensor_presence.evt.presence.report",
+            "tags": {
+              "location_id": "6"
+            },
+            "columns": [
+              "time",
+              "count_value"
+            ],
+            "values": [
+              [
+                1565007348441,
+                true
+              ]
+            ]
+          }
+        ],
+        "Messages": null
+      }
+    ]
+  },
+  "tags": null,
+  "props": null,
+  "ver": "1",
+  "corid": "8daaa2c6-62ca-4e31-b73b-38258aa22750",
+  "ctime": "2019-08-05T14:16:42.059+08:00",
+  "uid": "28f52003-7914-4c25-9cac-5bcfb01b9eba"
+}
+
 
 Error response :
 

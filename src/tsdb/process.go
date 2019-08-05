@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/futurehomeno/fimpgo"
 	influx "github.com/influxdata/influxdb1-client/v2"
+	log "github.com/sirupsen/logrus"
 )
 
 // Process implements integration flow between messaging system and influxdb timeseries database.
@@ -26,6 +26,7 @@ type Process struct {
 	transform   Transform
 	State       string
 	LastError   string
+	serviceMedataStore *MetadataStore // metadata store is used for event enrichment
 }
 
 
@@ -101,6 +102,7 @@ func (pr *Process) Init() error {
 	if pr.State == "INIT_FAILED" {
 		pr.State = "INITIALIZED"
 	}
+
 	log.Info("<tsdb> the process init state =",pr.State )
 	return nil
 }
@@ -123,7 +125,12 @@ func (pr *Process) OnMessage(topic string, addr *fimpgo.Address , iotMsg *fimpgo
 		addr.GlobalPrefix = pr.Config.SiteId
 	}
 	if pr.filter(context, topic, iotMsg, addr.GlobalPrefix, 0) {
-
+		meta ,err := pr.serviceMedataStore.GetMetadataByAddress(topic)
+		if err == nil {
+			context.metadata = &meta
+		}else {
+			log.Debug("No metadata found")
+		}
 		msg, err := pr.transform(context, topic,addr, iotMsg, addr.GlobalPrefix)
 		if err != nil {
 			log.Errorf("<tsdb> Transformation error: %s", err)
@@ -411,6 +418,8 @@ func (pr *Process) Start() error {
 	if pr.State == "INITIALIZED"{
 		pr.State = "RUNNING"
 	}
+	pr.serviceMedataStore = NewMetadataStore(pr.mqttTransport)
+	pr.serviceMedataStore.LoadFromTpRegistry()
 	log.Info("<tsdb> Process started. State = RUNNING ")
 	return nil
 

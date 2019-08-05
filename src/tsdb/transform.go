@@ -1,8 +1,10 @@
 package tsdb
 
 import (
+	"errors"
 	"github.com/futurehomeno/fimpgo"
 	influx "github.com/influxdata/influxdb1-client/v2"
+	"strconv"
 )
 
 // DefaultTransform - transforms IotMsg into InfluxDb datapoint
@@ -10,35 +12,18 @@ func DefaultTransform(context *MsgContext, topic string,addr *fimpgo.Address, io
 	tags := map[string]string{
 		"topic":  topic,
 		"domain": domain,
-		//"mtype":    iotMsg.Type,
-		//"serv": iotMsg.Service,
-		//"location_id":"",
-		//"location_alias":"",
-		//"service_id":"",
-		//"service_alias":"",
-		//"area_id":"",
-		//"area_alias":"",
-		//"area_type":"",
+		"location_id":"",
+		"service_id":"",
+		"thing_id":"",
 	}
-	//if context.vincDb != nil {
-	//	dev := GetVincDeviceByFimpAddress(context.vincDb,addr)
-	//	if dev != nil {
-	//		room := GetVincRoomById(context.vincDb,dev.Room)
-	//		if room != nil {
-	//			tags["location_id"] = strconv.Itoa(room.ID)
-	//			tags["location_alias"] = room.Client.Name
-	//			tags["service_id"] = strconv.Itoa(int(dev.ID))
-	//			tags["service_alias"] = dev.Client.Name
-	//			area := GetVincAreaById(context.vincDb,room.Area)
-	//			if area != nil {
-	//				tags["area_id"] = strconv.Itoa(int(area.ID))
-	//				tags["area_alias"] = area.Name
-	//				tags["area_type"] = area.Type
-	//			}
-	//		}
-	//	}
-	//}
+
 	//log.Debugf("<trans> Tags %+v",tags)
+	if context.metadata !=nil {
+		tags["location_id"] = strconv.Itoa(context.metadata.LocationID)
+		tags["service_id"] = strconv.Itoa(context.metadata.ServiceID)
+		tags["thing_id"] = strconv.Itoa(context.metadata.ThingID)
+	}
+
 	var fields map[string]interface{}
 	var vInt int64
 	var err error
@@ -85,13 +70,13 @@ func DefaultTransform(context *MsgContext, topic string,addr *fimpgo.Address, io
 		fields = map[string]interface{}{
 			"value": "object",
 		}
+	case "":
+		return nil,errors.New("value type is not defined")
 	default:
 		fields = map[string]interface{}{
 			"value": iotMsg.Value,
 		}
-
 	}
-
 	if fields != nil {
 		point, err := influx.NewPoint(context.measurementName, tags, fields, context.time)
 		return point, err

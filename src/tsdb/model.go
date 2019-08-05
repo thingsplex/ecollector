@@ -19,6 +19,7 @@ type MsgContext struct {
 	measurement *Measurement
 	measurementName string
 	time time.Time
+	metadata *ServiceMetaRec
 }
 
 // Selector defines message selector.

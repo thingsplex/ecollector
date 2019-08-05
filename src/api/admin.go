@@ -32,10 +32,12 @@ func(api *AdminApi) Start() {
 }
 
 func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo.FimpMessage,rawMessage []byte){
+	//TODO : Run in it's own goroutine
 	if iotMsg.Service != "ecollector" {
 		return
 	}
-
+	var msg *fimpgo.FimpMessage
+	var adr fimpgo.Address
 	switch iotMsg.Type {
 	case "cmd.ecprocess.get_list":
 
@@ -67,10 +69,7 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 		query  , _ := val["query"]
 		proc := api.integr.GetProcessByID(1)
 		response := proc.RunQuery(query)
-
-		msg := fimpgo.NewMessage("evt.tsdb.query_report", "ecollector", fimpgo.VTypeObject, response, nil, nil,iotMsg)
-		adr := fimpgo.Address{MsgType: fimpgo.MsgTypeEvt, ResourceType: fimpgo.ResourceTypeApp, ResourceName: "ecollector", ResourceAddress: "1"}
-		api.mqt.Publish(&adr,msg)
+		msg = fimpgo.NewMessage("evt.tsdb.query_report", "ecollector", fimpgo.VTypeObject, response, nil, nil,iotMsg)
 
 	case "cmd.tsdb.get_measurements":
 		//val,err := iotMsg.GetStrMapValue()
@@ -82,8 +81,18 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 		proc := api.integr.GetProcessByID(1)
 		response := proc.GetDbMeasurements()
 
-		msg := fimpgo.NewMessage("evt.tsdb.measurements_report", "ecollector", fimpgo.VTypeStrArray, response, nil, nil,iotMsg)
-		adr := fimpgo.Address{MsgType: fimpgo.MsgTypeEvt, ResourceType: fimpgo.ResourceTypeApp, ResourceName: "ecollector", ResourceAddress: "1"}
+		msg = fimpgo.NewMessage("evt.tsdb.measurements_report", "ecollector", fimpgo.VTypeStrArray, response, nil, nil,iotMsg)
+	}
+	if msg == nil {
+		return
+	}
+	if iotMsg.ResponseToTopic != "" {
+		fimpBin , _ := msg.SerializeToJson()
+		if fimpBin != nil {
+			api.mqt.PublishRaw(iotMsg.ResponseToTopic,fimpBin)
+		}
+	}else {
+		adr = fimpgo.Address{MsgType: fimpgo.MsgTypeEvt, ResourceType: fimpgo.ResourceTypeApp, ResourceName: "ecollector", ResourceAddress: "1"}
 		api.mqt.Publish(&adr,msg)
 	}
 
