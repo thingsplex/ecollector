@@ -27,7 +27,30 @@ func DefaultTransform(context *MsgContext, topic string,addr *fimpgo.Address, io
 	var fields map[string]interface{}
 	var vInt int64
 	var err error
-	switch iotMsg.ValueType {
+
+	valueType := iotMsg.ValueType
+	switch iotMsg.Service {
+	case "meter_elec" , "sensor_power":
+		val ,err := iotMsg.GetFloatValue()
+		unit , _ := iotMsg.Properties["unit"]
+		var mName string
+		if err == nil {
+			if unit == "W" {
+				mName = "electricity_meter_power"
+			}else if unit == "kWh" {
+				mName = "electricity_meter_energy"
+			}
+			fields = map[string]interface{}{
+				"value": val,
+				"unit":  unit,
+				"consumption":true,
+			}
+		}
+		context.measurementName = mName
+		valueType = "_skip_"
+	}
+
+	switch valueType {
 	case "float":
 		val ,err := iotMsg.GetFloatValue()
 		unit , _ := iotMsg.Properties["unit"]
@@ -72,6 +95,8 @@ func DefaultTransform(context *MsgContext, topic string,addr *fimpgo.Address, io
 		}
 	case "":
 		return nil,errors.New("value type is not defined")
+	case "_skip_":
+
 	default:
 		fields = map[string]interface{}{
 			"value": iotMsg.Value,

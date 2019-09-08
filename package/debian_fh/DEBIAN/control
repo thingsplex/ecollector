@@ -1,7 +1,8 @@
 Package: ecollector
-Version: 0.10.6
+Version: 0.1.1
+Replaces: ecollector
 Section: non-free/misc
 Priority: optional
 Architecture: armhf
 Maintainer: Aleksandrs Livincovs <aleksandrs.livincovs@gmail.com>
-Description: ecollector futurehome adapter.
+Description: Event collector service.futurehome .

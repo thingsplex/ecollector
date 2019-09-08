@@ -82,6 +82,48 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 		response := proc.GetDbMeasurements()
 
 		msg = fimpgo.NewMessage("evt.tsdb.measurements_report", "ecollector", fimpgo.VTypeStrArray, response, nil, nil,iotMsg)
+	case "cmd.tsdb.add_retention_policy":
+		// configure retentions
+		val,err := iotMsg.GetStrMapValue()
+		if err != nil {
+			log.Debug(" Wrong value format for cmd.influxdb.query")
+			return
+		}
+		name  , _ := val["name"]
+		duration  , _ := val["duration"]
+		proc := api.integr.GetProcessByID(1)
+		proc.UpdateRetentionPolicy(name,duration)
+
+	case "cmd.tsdb.update_retention_policy":
+		// configure retentions
+		val,err := iotMsg.GetStrMapValue()
+		if err != nil {
+			log.Debug(" Wrong value format for cmd.influxdb.query")
+			return
+		}
+		name  , _ := val["name"]
+		duration  , _ := val["duration"]
+		proc := api.integr.GetProcessByID(1)
+		proc.UpdateRetentionPolicy(name,duration)
+
+	case "cmd.tsdb.delete_retention_policy":
+		// configure retentions
+		val,err := iotMsg.GetStrMapValue()
+		if err != nil {
+			log.Debug(" Wrong value format for cmd.influxdb.query")
+			return
+		}
+		name  , _ := val["name"]
+		proc := api.integr.GetProcessByID(1)
+		proc.DeleteRetentionPolicy(name)
+
+		// set default retention policy
+	case "cmd.tsdb.set_defaults":
+		//
+	case "cmd.tsdb.get_configs":
+		//
+
+
 	}
 	if msg == nil {
 		return

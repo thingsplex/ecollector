@@ -40,8 +40,6 @@ func NewProcess(config *ProcessConfig) *Process {
 	return &proc
 }
 
-
-
 // Init doing the process bootrstrap .
 func (pr *Process) Init() error {
 	var err error
@@ -353,17 +351,21 @@ func (pr *Process) WriteIntoDb() error {
 			err = pr.influxC.Write(pr.batchPoints[bpKey])
 			if err == nil {
 				break
-			}else {
+			}else if strings.Contains(err.Error(),"field type conflict") {
+				log.Error("Write error. Err:",err.Error())
+				break
+			} else  {
 				log.Error("Retrying error after 3sec. Err:",err.Error())
 				time.Sleep(time.Second*3)
 			}
 		}
 
 		if err != nil {
-
 			if strings.Contains(err.Error(),"unable to parse") {
 				log.Error("<tsdb> Batch write error , unable to parse packet.Error: ", err)
-			}else {
+			}else if strings.Contains(err.Error(),"field type conflict") {
+				err = pr.InitBatchPoint(bpKey)
+			} else  {
 				pr.State = "LOST_CONNECTION"
 				log.Error("<tsdb> Batch write error , batch is dropped.Changing state to LOST_CONNECTION ", err)
 			}
@@ -445,7 +447,7 @@ func (pr *Process) Stop() error {
 }
 
 func (pr *Process) RunQuery(query string) *influx.Response {
-	q := influx.NewQuery(query, pr.Config.InfluxDB, "ms")
+	q := influx.NewQuery(query, pr.Config.InfluxDB, "s")
 	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
 		log.Debug(response.Results)
 		return response
@@ -456,6 +458,41 @@ func (pr *Process) RunQuery(query string) *influx.Response {
 
 }
 
+func (pr *Process) UpdateRetentionPolicy(name,duration string) {
+	log.Info("Altering retention policy")
+	var query = fmt.Sprintf("ALTER RETENTION POLICY %s ON %s DURATION %s", name, pr.Config.InfluxDB, duration)
+	q := influx.NewQuery(query, pr.Config.InfluxDB, "s")
+	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
+		log.Debug(response.Results)
+	}else {
+		log.Error(response.Error())
+	}
+
+}
+
+func (pr *Process) AddRetentionPolicy(name,duration string) {
+	log.Info("Adding retention policy")
+	var query = fmt.Sprintf("CREATE RETENTION POLICY %s ON %s DURATION %s", name, pr.Config.InfluxDB, duration)
+	q := influx.NewQuery(query, pr.Config.InfluxDB, "s")
+	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
+		log.Debug(response.Results)
+	}else {
+		log.Error(response.Error())
+	}
+
+}
+
+func (pr *Process) DeleteRetentionPolicy(name string) {
+	log.Info("Deleting retention policy")
+	var query = fmt.Sprintf("DROP RETENTION POLICY %s ON %s", name, pr.Config.InfluxDB)
+	q := influx.NewQuery(query, pr.Config.InfluxDB, "s")
+	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
+		log.Debug(response.Results)
+	}else {
+		log.Error(response.Error())
+	}
+
+}
 // Return list of measurements from db
 func (pr *Process) GetDbMeasurements() []string {
 	q := influx.NewQuery("SHOW MEASUREMENTS", pr.Config.InfluxDB, "ms")
