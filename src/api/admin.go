@@ -122,17 +122,12 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 		//
 	case "cmd.tsdb.get_configs":
 		//
-
-
 	}
 	if msg == nil {
 		return
 	}
 	if iotMsg.ResponseToTopic != "" {
-		fimpBin , _ := msg.SerializeToJson()
-		if fimpBin != nil {
-			api.mqt.PublishRaw(iotMsg.ResponseToTopic,fimpBin)
-		}
+		api.mqt.RespondToRequest(iotMsg,msg)
 	}else {
 		adr = fimpgo.Address{MsgType: fimpgo.MsgTypeEvt, ResourceType: fimpgo.ResourceTypeApp, ResourceName: "ecollector", ResourceAddress: "1"}
 		api.mqt.Publish(&adr,msg)

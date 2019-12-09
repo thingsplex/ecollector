@@ -347,16 +347,17 @@ func (pr *Process) WriteIntoDb() error {
 		log.Debugf("<tsdb> Writing batch of size = %d , using retention policy = %s into db = %s", len(pr.batchPoints[bpKey].Points()), pr.batchPoints[bpKey].RetentionPolicy(), pr.batchPoints[bpKey].Database())
 		var err error
 
-		for i:=0; i<3 ; i++  {
+		for i:=0; i<5 ; i++  {
 			err = pr.influxC.Write(pr.batchPoints[bpKey])
 			if err == nil {
 				break
 			}else if strings.Contains(err.Error(),"field type conflict") {
-				log.Error("Write error. Err:",err.Error())
+				break
+			}else if strings.Contains(err.Error(),"unable to parse") {
 				break
 			} else  {
-				log.Error("Retrying error after 3sec. Err:",err.Error())
-				time.Sleep(time.Second*3)
+				log.Error("Retrying error after 5 sec. Err:",err.Error())
+				time.Sleep(time.Second*5)
 			}
 		}
 
@@ -364,11 +365,12 @@ func (pr *Process) WriteIntoDb() error {
 			if strings.Contains(err.Error(),"unable to parse") {
 				log.Error("<tsdb> Batch write error , unable to parse packet.Error: ", err)
 			}else if strings.Contains(err.Error(),"field type conflict") {
-				err = pr.InitBatchPoint(bpKey)
+				log.Error("<tsdb> Field type conflict.Error: ", err)
 			} else  {
 				pr.State = "LOST_CONNECTION"
 				log.Error("<tsdb> Batch write error , batch is dropped.Changing state to LOST_CONNECTION ", err)
 			}
+			err = pr.InitBatchPoint(bpKey)
 
 		}else {
 			if pr.State != "RUNNING" {

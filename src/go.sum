@@ -12,6 +12,8 @@ github.com/futurehomeno/fimpgo v1.1.3 h1:AA8I9JWKz+g79cU1A6SX+qIZXD7aJr+DlF9sNHb
 github.com/futurehomeno/fimpgo v1.1.3/go.mod h1:3k5GUA6pVwj+T26pJHzmniBVFkN+9+VskSrsZEHiLcs=
 github.com/futurehomeno/fimpgo v1.4.0 h1:p/sPrJdg5EPW+A1ZHSBBOzeJBUdFWmtfxkYEq5vyk8I=
 github.com/futurehomeno/fimpgo v1.4.0/go.mod h1:HlCU8WBRMpYVmB/3MUh08VIDj+H95b9TQO6wVhUvrXY=
+github.com/futurehomeno/fimpgo v1.4.7-0.20190924195603-edc0cf37eef9 h1:y+tsxID98FraJAWHxsPWIq65ofLJXmVAflWraH8AND8=
+github.com/futurehomeno/fimpgo v1.4.7-0.20190924195603-edc0cf37eef9/go.mod h1:hVp7bMPj/wz4zejT6O0WCPCttKqSNn+72+n5Elu7wNI=
 github.com/influxdata/influxdb1-client v0.0.0-20190402204710-8ff2fc3824fc h1:KpMgaYJRieDkHZJWY3LMafvtqS/U8xX6+lUN+OKpl/Y=
 github.com/influxdata/influxdb1-client v0.0.0-20190402204710-8ff2fc3824fc/go.mod h1:qj24IKcXYK6Iy9ceXlo3Tc+vtHo9lIhSX5JddghvEPo=
 github.com/konsorten/go-windows-terminal-sequences v1.0.1 h1:mweAR1A6xJ3oS2pRaGiHgQ4OO8tzTaLawm8vnODuwDk=
