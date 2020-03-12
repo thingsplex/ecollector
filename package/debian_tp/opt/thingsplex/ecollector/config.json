@@ -4,7 +4,7 @@
   "mqtt_client_id_prefix":"ecollector-api",
   "mqtt_server_username":"",
   "mqtt_server_password":"",
-  "log_file": "",
+  "log_file": "/var/log/thingsplex/ecollector/ecollector.log",
   "log_level": "debug",
   "log_format": "text",
   "proc_config_store_path": "./proc"

@@ -1,4 +1,4 @@
-package tsdb
+package metadata
 
 import (
 	"errors"
@@ -16,23 +16,16 @@ type TpRegService struct {
 	LocationId          int    `json:"location_id" `
 }
 
-type ServiceMetaRec struct {
-	Address    string
-	ServiceID  int
-	ThingID    int
-	LocationID int
-}
-
-type MetadataStore struct {
+type TpMetadataStore struct {
 	store []ServiceMetaRec
 	mqt   *fimpgo.MqttTransport
 }
 
-func NewMetadataStore(mqt *fimpgo.MqttTransport) *MetadataStore {
-	return &MetadataStore{mqt: mqt}
+func NewTpMetadataStore(mqt *fimpgo.MqttTransport) MetadataStore {
+	return &TpMetadataStore{mqt: mqt}
 }
 
-func (sm *MetadataStore) LoadFromTpRegistry() {
+func (sm *TpMetadataStore) Start() error {
 	log.Info("Loading metadata from TpRegistry")
 	respTopic := "pt:j1/mt:rsp/rt:app/rn:ecollector/ad:1"
 	sClient := fimpgo.NewSyncClient(sm.mqt)
@@ -44,20 +37,21 @@ func (sm *MetadataStore) LoadFromTpRegistry() {
 	sClient.RemoveSubscription(respTopic)
 	if err != nil {
 		log.Error("Error while loading metadata from TpRegistry")
-		return
+		return err
 	}
 	var serv []TpRegService
 	resp.GetObjectValue(&serv)
 	sm.store = []ServiceMetaRec{}
 	var i int
 	for i = range serv {
-		rec := ServiceMetaRec{ServiceID: serv[i].ID, ThingID: serv[i].ParentContainerId, LocationID: serv[i].LocationId,Address:serv[i].Address}
+		rec := ServiceMetaRec{DeviceID: serv[i].ParentContainerId, LocationID: serv[i].LocationId,Address:serv[i].Address}
 		sm.store = append(sm.store, rec)
 	}
 	log.Debug("Number of entries loaded to the store ", i)
+	return nil
 }
 
-func (sm *MetadataStore) GetMetadataByAddress(address string) (ServiceMetaRec , error) {
+func (sm *TpMetadataStore) GetMetadataByAddress(address string) (ServiceMetaRec , error) {
 	address = strings.Replace(address,"pt:j1/mt:evt","",1)
 	address = strings.Replace(address,"pt:j1/mt:cmd","",1)
 	for i := range sm.store {

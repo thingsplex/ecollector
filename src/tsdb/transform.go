@@ -14,20 +14,20 @@ func DefaultTransform(context *MsgContext, topic string,addr *fimpgo.Address, io
 		"domain": domain,
 		"location_id":"",
 		"service_id":"",
-		"thing_id":"",
+		"dev_id":"",
+		"dev_type":"",
 	}
 
 	//log.Debugf("<trans> Tags %+v",tags)
 	if context.metadata !=nil {
 		tags["location_id"] = strconv.Itoa(context.metadata.LocationID)
-		tags["service_id"] = strconv.Itoa(context.metadata.ServiceID)
-		tags["thing_id"] = strconv.Itoa(context.metadata.ThingID)
+		tags["dev_id"] = strconv.Itoa(context.metadata.DeviceID)
 	}
 
-	var fields map[string]interface{}
 	var vInt int64
 	var err error
-
+	fields := map[string]interface{}{}
+	fields["src"] = iotMsg.Source // src can change as several services can generate commands as result the field can't be stored as tag
 	valueType := iotMsg.ValueType
 	switch iotMsg.Service {
 	case "meter_elec" , "sensor_power":
@@ -40,11 +40,10 @@ func DefaultTransform(context *MsgContext, topic string,addr *fimpgo.Address, io
 			}else if unit == "kWh" {
 				mName = "electricity_meter_energy"
 			}
-			fields = map[string]interface{}{
-				"value": val,
-				"unit":  unit,
-				"consumption":true,
-			}
+			fields["value"] = val
+			fields["unit"] = unit
+			fields["consumption"] = true
+
 		}
 		context.measurementName = mName
 		valueType = "_skip_"
@@ -55,52 +54,39 @@ func DefaultTransform(context *MsgContext, topic string,addr *fimpgo.Address, io
 		val ,err := iotMsg.GetFloatValue()
 		unit , _ := iotMsg.Properties["unit"]
 		if err == nil {
-			fields = map[string]interface{}{
-				"value": val,
-				"unit":  unit,
-			}
+			fields["value"] = val
+			fields["unit"] = unit
 		}
 
 	case "bool":
 		val ,err := iotMsg.GetBoolValue()
 		if err == nil {
-			fields = map[string]interface{}{
-				"value": val,
-			}
+			fields["value"] = val
 		}
 
 	case "int":
 		vInt, err = iotMsg.GetIntValue()
 		if err == nil {
-			fields = map[string]interface{}{
-				"value": vInt,
-			}
+			fields["value"] = vInt
 		}
 
 	case "string":
 		vStr, err := iotMsg.GetStringValue()
 		if err == nil {
-			fields = map[string]interface{}{
-				"value": vStr,
-			}
+			fields["value"] = vStr
 		}
 
 	case "null":
-		fields = map[string]interface{}{
-			"value": 0,
-		}
+		fields["value"] = 0
 	case "object":
-		fields = map[string]interface{}{
-			"value": "object",
-		}
+		fields["value"] = "object"
 	case "":
 		return nil,errors.New("value type is not defined")
 	case "_skip_":
 
 	default:
-		fields = map[string]interface{}{
-			"value": iotMsg.Value,
-		}
+
+		fields["value"] = iotMsg.Value
 	}
 	if fields != nil {
 		point, err := influx.NewPoint(context.measurementName, tags, fields, context.time)
@@ -111,48 +97,4 @@ func DefaultTransform(context *MsgContext, topic string,addr *fimpgo.Address, io
 
 }
 
-//func GetVincDeviceByFimpAddress(vincDb *vincInfra.HubData, addr *fimpgo.Address) *vincModel.Device {
-//	node,_ := utils.GetNodeAndEndpoint(addr.ServiceAddress)
-//	adapter := addr.ResourceName
-//	if adapter == "zw" {
-//		adapter = "zwave-ad"
-//	}
-//	for i := range vincDb.Device {
-//		if vincDb.Device[i].Fimp.Adapter == adapter && vincDb.Device[i].Fimp.Address == node {
-//			return &vincDb.Device[i]
-//		}
-//	}
-//	return nil
-//}
-//
-//func GetVincDeviceByFimpDevAddress(vincDb *vincInfra.HubData, adapter,node string ) *vincModel.Device {
-//	if adapter == "zw" {
-//		adapter = "zwave-ad"
-//	}
-//	for i := range vincDb.Device {
-//		if vincDb.Device[i].Fimp.Adapter == adapter && vincDb.Device[i].Fimp.Address == node {
-//			return &vincDb.Device[i]
-//		}
-//	}
-//	return nil
-//}
-//
-//
-//func GetVincRoomById(vincDb *vincInfra.HubData, roomId int) *vincModel.Room {
-//	for i := range vincDb.Room {
-//		if vincDb.Room[i].ID == roomId {
-//			return &vincDb.Room[i]
-//		}
-//	}
-//	return nil
-//}
-//
-//func GetVincAreaById(vincDb *vincInfra.HubData, areaId int) *vincModel.Area {
-//	for i := range vincDb.Area {
-//		if vincDb.Area[i].ID == areaId {
-//			return &vincDb.Area[i]
-//		}
-//	}
-//	return nil
-//}
 

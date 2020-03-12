@@ -59,7 +59,6 @@ func (pr *Process) AddMeasurement(measurement Measurement) string {
 	pr.apiMutex.Lock()
 	pr.Config.Measurements = append(pr.Config.Measurements, measurement)
 	pr.InitBatchPoint(measurement.ID)
-
 	return measurement.ID
 }
 
@@ -75,7 +74,6 @@ func (pr *Process) RemoveMeasurement(ID string) {
 		}
 	}
 }
-
 
 
 // GetFilters returns all filters

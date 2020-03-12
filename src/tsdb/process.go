@@ -3,6 +3,7 @@ package tsdb
 import (
 	"errors"
 	"fmt"
+	"github.com/thingsplex/ecollector/metadata"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -26,7 +27,7 @@ type Process struct {
 	transform   Transform
 	State       string
 	LastError   string
-	serviceMedataStore *MetadataStore // metadata store is used for event enrichment
+	serviceMedataStore metadata.MetadataStore // metadata store is used for event enrichment
 }
 
 
@@ -422,8 +423,10 @@ func (pr *Process) Start() error {
 	if pr.State == "INITIALIZED"{
 		pr.State = "RUNNING"
 	}
-	pr.serviceMedataStore = NewMetadataStore(pr.mqttTransport)
-	pr.serviceMedataStore.LoadFromTpRegistry()
+	pr.serviceMedataStore = metadata.NewVincMetadataStore(pr.mqttTransport)
+	//pr.serviceMedataStore = metadata.NewTpMetadataStore(pr.mqttTransport)
+	//pr.serviceMedataStore.LoadFromTpRegistry()
+	pr.serviceMedataStore.Start()
 	log.Info("<tsdb> Process started. State = RUNNING ")
 	return nil
 

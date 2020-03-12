@@ -44,7 +44,6 @@ func (it *Integration) GetDefaultIntegrConfig() []ProcessConfig {
 		{ID: 4, Topic: "pt:j1/mt:cmd/rt:app/#"},
 		{ID: 5, Topic: "pt:j1/mt:evt/rt:ad/#"},
 		{ID: 6, Topic: "pt:j1/mt:cmd/rt:ad/#"},
-
 	}
 
 	measurements2 := []Measurement{
@@ -104,7 +103,6 @@ func (it *Integration) UpdateProcConfig(ID IDt, procConfig ProcessConfig, doRest
 
 // LoadConfig loads integration configs from json file and saves it into ProcessConfigs
 func (it *Integration) LoadConfig() error {
-
 
 	if it.configSaveMutex == nil {
 		it.configSaveMutex = &sync.Mutex{}
@@ -168,7 +166,7 @@ func (it *Integration) SaveConfigs() error {
 // InitProcesses loads and starts ALL processes based on ProcessConfigs
 func (it *Integration) InitProcesses() error {
 	if it.processConfigs == nil {
-		return errors.New("Load configurations first.")
+		return errors.New("Start configurations first.")
 	}
 	for i := range it.processConfigs {
 		if it.processConfigs[i].SiteId == "" {

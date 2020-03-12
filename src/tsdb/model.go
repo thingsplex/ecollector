@@ -3,6 +3,7 @@ package tsdb
 import (
 	"github.com/futurehomeno/fimpgo"
 	influx "github.com/influxdata/influxdb1-client/v2"
+	metadata2 "github.com/thingsplex/ecollector/metadata"
 	"reflect"
 	"time"
 )
@@ -19,7 +20,7 @@ type MsgContext struct {
 	measurement *Measurement
 	measurementName string
 	time time.Time
-	metadata *ServiceMetaRec
+	metadata *metadata2.ServiceMetaRec
 }
 
 // Selector defines message selector.
