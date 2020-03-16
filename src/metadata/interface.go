@@ -10,4 +10,5 @@ type ServiceMetaRec struct {
 type MetadataStore interface {
 	GetMetadataByAddress(address string) (ServiceMetaRec , error)
 	Start() error
+	Stop() error
 }

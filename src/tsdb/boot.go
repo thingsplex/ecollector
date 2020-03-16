@@ -24,6 +24,10 @@ type Integration struct {
 	//registry *registry.ThingRegistryStore
 }
 
+func (it *Integration) Processes() []*Process {
+	return it.processes
+}
+
 // GetProcessByID returns process by it's ID
 func (it *Integration) GetProcessByID(ID IDt) *Process {
 	for i := range it.processes {
@@ -56,7 +60,7 @@ func (it *Integration) GetDefaultIntegrConfig() []ProcessConfig {
 	}
 	config2 := ProcessConfig{
 		ID:                 2,
-		Name:				"MDU monitoring",
+		Name:				"Default event storage",
 		MqttBrokerAddr:     "tcp://localhost:1883",
 		MqttBrokerUsername: "",
 		MqttBrokerPassword: "",

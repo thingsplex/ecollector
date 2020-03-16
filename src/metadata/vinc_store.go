@@ -25,11 +25,15 @@ func (r *VincMetadataStore) Start() error {
 	return r.vApi.ReloadSiteToCache(5)
 }
 
+func (r *VincMetadataStore) Stop() error {
+	r.vApi.Stop()
+	return nil
+}
 
 func (r *VincMetadataStore) GetMetadataByAddress(topic string) (ServiceMetaRec , error) {
 	address := strings.Replace(topic,"pt:j1/mt:evt","",1)
 	address = strings.Replace(address,"pt:j1/mt:cmd","",1)
-	log.Debugf("Doing lookup of %s",address)
+	log.Tracef("Doing lookup of %s",address)
 	site,err := r.vApi.GetSite(true)
 	if err != nil {
 		return ServiceMetaRec{},err

@@ -25,6 +25,8 @@ func NewTpMetadataStore(mqt *fimpgo.MqttTransport) MetadataStore {
 	return &TpMetadataStore{mqt: mqt}
 }
 
+
+
 func (sm *TpMetadataStore) Start() error {
 	log.Info("Loading metadata from TpRegistry")
 	respTopic := "pt:j1/mt:rsp/rt:app/rn:ecollector/ad:1"
@@ -48,6 +50,10 @@ func (sm *TpMetadataStore) Start() error {
 		sm.store = append(sm.store, rec)
 	}
 	log.Debug("Number of entries loaded to the store ", i)
+	return nil
+}
+
+func (sm *TpMetadataStore) Stop() error {
 	return nil
 }
 

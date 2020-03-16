@@ -15,7 +15,7 @@ fi
 deb-systemd-helper unmask ecollector.service >/dev/null || true
 
 if deb-systemd-helper --quiet was-enabled ecollector.service; then
-  deb-systemd-helper enable ecollector.service >/dev/null || true
+  systemctl enable ecollector.service || true
 else
   deb-systemd-helper update-state ecollector.service >/dev/null || true
 fi

@@ -50,7 +50,6 @@ func (pr *Process) RemoveSelector(ID IDt) {
 	}
 }
 
-
 // AddMeasurement adds new Measurement
 func (pr *Process) AddMeasurement(measurement Measurement) string {
 	defer func() {
@@ -74,7 +73,6 @@ func (pr *Process) RemoveMeasurement(ID string) {
 		}
 	}
 }
-
 
 // GetFilters returns all filters
 func (pr *Process) GetFilters() []Filter {

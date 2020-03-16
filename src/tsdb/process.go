@@ -401,7 +401,7 @@ func (pr *Process) WriteIntoDb() error {
 func (pr *Process) Start() error {
 	log.Info("<tsdb> Starting process...")
 	// try to initialize process first if current state is not INITIALIZED
-	if pr.State == "INIT_FAILED" || pr.State == "LOADED" || pr.State == "INITIALIZED_WITH_ERRORS" {
+	if pr.State == "INIT_FAILED" || pr.State == "LOADED" || pr.State == "INITIALIZED_WITH_ERRORS" || pr.State == "STOPPED" {
 		if err := pr.Init(); err != nil {
 			return err
 		}
@@ -446,6 +446,7 @@ func (pr *Process) Stop() error {
 	}
 	pr.influxC.Close()
 	pr.mqttTransport.Stop()
+	pr.serviceMedataStore.Stop()
 	pr.State = "STOPPED"
 	log.Info("<tsdb> Process stopped")
 	return nil
@@ -454,7 +455,7 @@ func (pr *Process) Stop() error {
 func (pr *Process) RunQuery(query string) *influx.Response {
 	q := influx.NewQuery(query, pr.Config.InfluxDB, "s")
 	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
-		log.Debug(response.Results)
+		log.Trace(response.Results)
 		return response
 	}else {
 		log.Error(response.Error())
@@ -488,7 +489,7 @@ func (pr *Process) AddRetentionPolicy(name,duration string) {
 }
 
 func (pr *Process) DeleteRetentionPolicy(name string) {
-	log.Info("Deleting retention policy")
+	log.Infof("Deleting retention policy %s",name)
 	var query = fmt.Sprintf("DROP RETENTION POLICY %s ON %s", name, pr.Config.InfluxDB)
 	q := influx.NewQuery(query, pr.Config.InfluxDB, "s")
 	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
@@ -498,11 +499,46 @@ func (pr *Process) DeleteRetentionPolicy(name string) {
 	}
 
 }
+
+func (pr *Process) DeleteMeasurement(name string) {
+	log.Infof("Deleting measurement %s",name)
+	var query = fmt.Sprintf("DROP MEASUREMENT \"%s\" ", name)
+	q := influx.NewQuery(query, pr.Config.InfluxDB, "s")
+	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
+		log.Debug(response.Results)
+	}else {
+		log.Error(response.Error())
+	}
+
+}
+
 // Return list of measurements from db
 func (pr *Process) GetDbMeasurements() []string {
 	q := influx.NewQuery("SHOW MEASUREMENTS", pr.Config.InfluxDB, "ms")
 	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
-		log.Debug(response.Results)
+		//log.Debug(response.Results)
+		if len(response.Results) > 0 {
+			if len(response.Results[0].Series)>0 {
+				var result []string
+				for i := range response.Results[0].Series[0].Values {
+					result = append(result,response.Results[0].Series[0].Values[i][0].(string))
+				}
+				return result
+			}
+		}
+		return nil
+	}else {
+		log.Error(err)
+		log.Error(response.Error())
+	}
+	return nil
+}
+
+// Return list of measurements from db
+func (pr *Process) GetDbRetentionPolicies() []string {
+	q := influx.NewQuery("SHOW RETENTION POLICIES", pr.Config.InfluxDB, "ms")
+	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
+		//log.Debug(response.Results)
 		if len(response.Results) > 0 {
 			if len(response.Results[0].Series)>0 {
 				var result []string

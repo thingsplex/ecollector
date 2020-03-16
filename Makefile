@@ -1,7 +1,8 @@
-version="0.1.2"
+version="0.2.0"
 version_file=VERSION
 working_dir=$(shell pwd)
 arch="armhf"
+remote_host = "fh@cube.local"
 
 clean:
 	-rm ecollector
@@ -54,6 +55,15 @@ deb-amd : configure-amd64 build-go-amd package-deb-doc-tp
 
 run :
 	cd ./src; go run service.go -c testdata/config.json;cd ../
+
+upload :
+	scp package/build/ecollector_$(version)_armhf.deb $(remote_host):~/
+
+upload-install : upload
+	ssh -t $(remote_host) "sudo dpkg -i ecollector_$(version)_armhf.deb"
+
+remote-install : deb-arm-tp upload
+	ssh -t $(remote_host) "sudo dpkg -i ecollector_$(version)_armhf.deb"
 
 
 .phony : clean
