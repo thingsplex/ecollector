@@ -1,0 +1,2 @@
+Number of adapter restarts during last 5 hours :
+SELECT count("value") as "mean_value" FROM "default_20w"."zwave-ad.evt.state.report" WHERE time > now()-5h GROUP BY time(1m) fill(null)

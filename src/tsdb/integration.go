@@ -3,13 +3,17 @@ package tsdb
 import (
 	"encoding/json"
 	"errors"
-	"github.com/thingsplex/ecollector/utils"
+	"github.com/futurehomeno/fimpgo"
+	"github.com/shirou/gopsutil/disk"
+	log "github.com/sirupsen/logrus"
+	"github.com/thingsplex/ecollector/metadata"
 	"github.com/thingsplex/ecollector/model"
+	"github.com/thingsplex/ecollector/utils"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sync"
-	log "github.com/sirupsen/logrus"
+	"time"
 )
 
 // Integration is root level container
@@ -20,8 +24,11 @@ type Integration struct {
 	StoreLocation   string
 	storeFullPath   string
 	Name            string
+	diskMonitorTicker *time.Ticker
 	configSaveMutex *sync.Mutex
-	//registry *registry.ThingRegistryStore
+	serviceMedataStore metadata.MetadataStore // metadata store is used for event enrichment
+	DisableDiskMonitor    bool
+	DiskMonitorShutdownLimit float64 // used disk space limit in % , if disk used space goes above the limit , ecollector stops all processes
 }
 
 func (it *Integration) Processes() []*Process {
@@ -53,30 +60,47 @@ func (it *Integration) GetDefaultIntegrConfig() []ProcessConfig {
 	measurements2 := []Measurement{
 		{
 			ID:                      "default",
-			RetentionPolicyDuration: "8w",
-			RetentionPolicyName:     "default_8w",
+			RetentionPolicyDuration: "20w",
+			RetentionPolicyName:     "default_20w",
 			UseServiceAsMeasurementName:true,
 		},
 	}
+
+	filters := []Filter{
+		{
+			ID: 1,
+			Name: "exclude_vinculum_notify",
+			MsgType: "evt.pd7.notify",
+			IsAtomic: true,
+			Negation: true,
+		},{
+			ID: 2,
+			Name: "allow all",
+			MsgType: "",
+			IsAtomic: true,
+			Negation: false,
+		},
+	}
+
 	config2 := ProcessConfig{
 		ID:                 2,
 		Name:				"Default event storage",
 		MqttBrokerAddr:     "tcp://localhost:1883",
 		MqttBrokerUsername: "",
 		MqttBrokerPassword: "",
-		MqttClientID:       "",
+		MqttClientID:       "ecollector_2",
 		InfluxAddr:         "http://localhost:8086",
 		InfluxUsername:     "",
 		InfluxPassword:     "",
 		InfluxDB:           "historian",
 		BatchMaxSize:       1000,
 		SaveInterval:       5000,
-		Filters: 			[]Filter{},
+		Filters: 			filters,
 		Selectors:          selector2,
 		Measurements:       measurements2,
 		SiteId:utils.GetFhSiteId(""),
 		Autostart:true,
-		InitDb:false,
+		InitDb:true,
 	}
 
 	return []ProcessConfig{config2}
@@ -87,7 +111,6 @@ func (it *Integration) GetDefaultIntegrConfig() []ProcessConfig {
 func (it *Integration) Init() {
 	it.storeFullPath = filepath.Join(it.StoreLocation, it.Name+".json")
 }
-
 
 // SetConfig config setter
 func (it *Integration) SetConfig(processConfigs []ProcessConfig) {
@@ -169,23 +192,30 @@ func (it *Integration) SaveConfigs() error {
 
 // InitProcesses loads and starts ALL processes based on ProcessConfigs
 func (it *Integration) InitProcesses() error {
+
 	if it.processConfigs == nil {
 		return errors.New("Start configurations first.")
 	}
 	for i := range it.processConfigs {
 		if it.processConfigs[i].SiteId == "" {
-			it.processConfigs[i].SiteId = utils.GetFhSiteId("");
+			it.processConfigs[i].SiteId = utils.GetFhSiteId("")
 		}
 		log.Info("Site id = ", it.processConfigs[i].SiteId)
 		it.InitNewProcess(&it.processConfigs[i])
 	}
+	//Initializing shared metadata store.The store is shared between processes.
+	mqt := fimpgo.NewMqttTransport(it.processConfigs[0].MqttBrokerAddr,it.processConfigs[0].MqttClientID,it.processConfigs[0].MqttBrokerUsername, it.processConfigs[0].MqttBrokerPassword,true,1,1)
+	mqt.Start()
+	//TODO:subscribe to vinculum topic
+	it.serviceMedataStore = metadata.NewVincMetadataStore(mqt)
+	it.serviceMedataStore.Start()
 	return nil
 }
 
 // InitNewProcess initialize and start single process
 func (it *Integration) InitNewProcess(procConfig *ProcessConfig) error {
-
 	proc := NewProcess(procConfig)
+	proc.SetServiceMedataStore(it.serviceMedataStore)
 	it.processes = append(it.processes, proc)
 	if procConfig.Autostart {
 		err := proc.Init()
@@ -247,6 +277,31 @@ func (it *Integration) RemoveProcess(ID IDt) error {
 	return err
 }
 
+func (it *Integration) StartDiskMonitor() {
+	if it.diskMonitorTicker != nil {
+		it.diskMonitorTicker.Stop()
+	}
+	it.diskMonitorTicker = time.NewTicker(1 * time.Minute)
+	go func() {
+		for {
+			<-it.diskMonitorTicker.C
+			info,err:= disk.Usage("/")
+			if err != nil {
+				log.Error("Disk monitor failed to obtain disk usage .Error :",err.Error())
+				continue
+			}
+			if info.UsedPercent > it.DiskMonitorShutdownLimit {
+				log.Error("!!!!! DISK LOW SPACE !!!! Stopping all processes ")
+				for i := range it.processes {
+					it.processes[i].Stop()
+				}
+			}
+		}
+		log.Error("!!!!! DISK MONITOR HAS STOPPED !!!! ")
+	}()
+
+}
+
 // Boot initializes integration
 func Boot(mainConfig *model.Configs) *Integration {
 	log.Info("<tsdb>Booting InfluxDB integration ")
@@ -254,18 +309,24 @@ func Boot(mainConfig *model.Configs) *Integration {
 		log.Info("<tsdb> Config path path is not defined  ")
 		return nil
 	}
-	log.Info("<tsdb> Connecting to vinculum  ",mainConfig.VincHost)
 	log.Info("<tsdb> Connected  ")
 	//hubDataUpdated := vincClient.InfraClient.RegisterMessageSubscriber()
 	//vincDb := vincClient.GetInfrastructure()
-	integr := Integration{Name: "influxdb", StoreLocation: mainConfig.ProcConfigStorePath}
+
+	integr := Integration{Name: "influxdb", StoreLocation: mainConfig.ProcConfigStorePath,DiskMonitorShutdownLimit: mainConfig.DiskMonitorShutdownLimit,DisableDiskMonitor: mainConfig.DisableDiskMonitor}
 	log.Info("<tsdb> Initializing integration  ")
 	integr.Init()
 	log.Info("<tsdb> Loading configs  ")
 	integr.LoadConfig()
 	log.Info("<tsdb> Initializing processes ")
 	integr.InitProcesses()
+	if mainConfig.DiskMonitorShutdownLimit == 0 {
+		mainConfig.DiskMonitorShutdownLimit = 85
+	}
+	if !mainConfig.DisableDiskMonitor {
+		log.Info("<tsdb> Starting disk monitor ")
+		integr.StartDiskMonitor()
+	}
 	log.Info("<tsdb> All good . Running ... ")
-
 	return &integr
 }

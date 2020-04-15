@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
 	"github.com/futurehomeno/fimpgo"
 	influx "github.com/influxdata/influxdb1-client/v2"
 	log "github.com/sirupsen/logrus"
@@ -30,8 +29,6 @@ type Process struct {
 	serviceMedataStore metadata.MetadataStore // metadata store is used for event enrichment
 }
 
-
-
 // NewProcess is a constructor
 func NewProcess(config *ProcessConfig) *Process {
 	proc := Process{Config: config, transform: DefaultTransform}
@@ -39,6 +36,10 @@ func NewProcess(config *ProcessConfig) *Process {
 	proc.apiMutex = &sync.Mutex{}
 	proc.State = "LOADED"
 	return &proc
+}
+
+func (pr *Process) SetServiceMedataStore(serviceMedataStore metadata.MetadataStore) {
+	pr.serviceMedataStore = serviceMedataStore
 }
 
 // Init doing the process bootrstrap .
@@ -171,7 +172,7 @@ func (pr *Process) AddMessage(topic string, addr *fimpgo.Address , iotMsg *fimpg
 }
 
 
-// Filter - transforms IotMsg into DB compatable struct
+// Filter - transforms IotMsg into DB compatible struct
 func (pr *Process) filter(context *MsgContext, topic string, iotMsg *fimpgo.FimpMessage, domain string, filterID IDt) bool {
 	var result bool
 	// no filters defines , everything is allowed
@@ -423,10 +424,13 @@ func (pr *Process) Start() error {
 	if pr.State == "INITIALIZED"{
 		pr.State = "RUNNING"
 	}
-	pr.serviceMedataStore = metadata.NewVincMetadataStore(pr.mqttTransport)
+	if pr.serviceMedataStore == nil {
+		pr.serviceMedataStore = metadata.NewVincMetadataStore(pr.mqttTransport)
+		pr.serviceMedataStore.Start()
+	}
 	//pr.serviceMedataStore = metadata.NewTpMetadataStore(pr.mqttTransport)
 	//pr.serviceMedataStore.LoadFromTpRegistry()
-	pr.serviceMedataStore.Start()
+
 	log.Info("<tsdb> Process started. State = RUNNING ")
 	return nil
 

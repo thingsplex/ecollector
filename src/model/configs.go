@@ -12,5 +12,6 @@ type Configs struct {
 	LogFormat             string `json:"log_format"`
 	ProcConfigStorePath   string `json:"proc_config_store_path"`
 	InitDb                bool   `json:"init_db"`
-	VincHost              string `json:"vinc_host"`
+	DisableDiskMonitor    bool   `json:"disable_disk_monitor"`
+	DiskMonitorShutdownLimit float64 `json:"disk_monitor_shutdown_limit"`
 }

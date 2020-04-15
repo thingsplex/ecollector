@@ -35,19 +35,7 @@ package-deb-doc-tp:
 	docker run --rm -v ${working_dir}:/build -w /build --name debuild debian dpkg-deb --build package/debian_tp
 	@echo "Done"
 
-package-deb-doc-fh:
-	@echo "Packaging application as Futurehome debian package"
-	chmod a+x package/debian_fh/DEBIAN/*
-	cp ./src/ecollector package/debian_fh/usr/bin/ecollector
-	cp VERSION package/debian_fh/var/lib/futurehome/ecollector
-	docker run --rm -v ${working_dir}:/build -w /build --name debuild debian dpkg-deb --build package/debian_fh
-	@echo "Done"
-
-
-deb-arm-fh : clean configure-arm build-go-arm package-deb-doc-fh
-	mv package/debian_fh.deb package/build/ecollector_$(version)_armhf.deb
-
-deb-arm-tp : clean configure-arm build-go-arm package-deb-doc-tp
+deb-arm : clean configure-arm build-go-arm package-deb-doc-tp
 	mv package/debian_tp.deb package/build/ecollector_$(version)_armhf.deb
 
 deb-amd : configure-amd64 build-go-amd package-deb-doc-tp
@@ -62,7 +50,7 @@ upload :
 upload-install : upload
 	ssh -t $(remote_host) "sudo dpkg -i ecollector_$(version)_armhf.deb"
 
-remote-install : deb-arm-tp upload
+remote-install : deb-arm upload
 	ssh -t $(remote_host) "sudo dpkg -i ecollector_$(version)_armhf.deb"
 
 

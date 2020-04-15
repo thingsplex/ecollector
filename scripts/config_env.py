@@ -26,6 +26,5 @@ if __name__ == "__main__":
    environment = sys.argv[1] 
    version = sys.argv[2]
    arch = sys.argv[3]
-   set_deb_control(version,arch,"./package/debian_fh/DEBIAN/control")
    set_deb_control(version,arch,"./package/debian_tp/DEBIAN/control")
    set_version_file(version)
