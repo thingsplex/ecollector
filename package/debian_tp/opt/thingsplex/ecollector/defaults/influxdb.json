@@ -1,0 +1,87 @@
+[
+  {
+    "ID": 1,
+    "Name": "default",
+    "MqttBrokerAddr": "tcp://localhost:1883",
+    "MqttClientID": "ecollector_1",
+    "MqttBrokerUsername": "",
+    "MqttBrokerPassword": "",
+    "InfluxAddr": "http://localhost:8086",
+    "InfluxUsername": "",
+    "InfluxPassword": "",
+    "InfluxDB": "historian",
+    "BatchMaxSize": 100,
+    "SaveInterval": 5000,
+    "Filters": [
+      {
+        "ID": 1,
+        "Name": "exclude_vinculum_notify",
+        "MsgType": "evt.pd7.notify",
+        "IsAtomic": true,
+        "Negation": true
+      },{
+        "ID": 2,
+        "Name": "exclude_vinculum_request",
+        "MsgType": "cmd.pd7.request",
+        "IsAtomic": true,
+        "Negation": true
+      },{
+        "ID": 3,
+        "Name": "exclude_vinculum_response",
+        "MsgType": "evt.pd7.response",
+        "IsAtomic": true,
+        "Negation": true
+      },{
+        "ID": 4,
+        "Name": "allow all",
+        "MsgType": "",
+        "IsAtomic": true,
+        "Negation": false
+      }
+    ],
+    "Selectors": [
+      {
+        "ID": 1,
+        "Topic": "pt:j1/mt:evt/rt:dev/#",
+        "InMemory": false
+      },
+      {
+        "ID": 2,
+        "Topic": "pt:j1/mt:cmd/rt:dev/#",
+        "InMemory": false
+      },
+      {
+        "ID": 3,
+        "Topic": "pt:j1/mt:evt/rt:app/#",
+        "InMemory": false
+      },
+      {
+        "ID": 4,
+        "Topic": "pt:j1/mt:cmd/rt:app/#",
+        "InMemory": false
+      },
+      {
+        "ID": 5,
+        "Topic": "pt:j1/mt:evt/rt:ad/#",
+        "InMemory": false
+      },
+      {
+        "ID": 6,
+        "Topic": "pt:j1/mt:cmd/rt:ad/#",
+        "InMemory": false
+      }
+    ],
+    "Measurements": [
+      {
+        "ID": "default",
+        "Name": "",
+        "UseServiceAsMeasurementName": true,
+        "RetentionPolicyName": "default_20w",
+        "RetentionPolicyDuration": "12w"
+      }
+    ],
+    "Autostart": true,
+    "InitDb": true,
+    "SiteId": "-"
+  }
+]

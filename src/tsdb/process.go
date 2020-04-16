@@ -78,7 +78,11 @@ func (pr *Process) Init() error {
 			if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
 				log.Infof("<tsdb> Retention policy %s was created with status :%s", mes.RetentionPolicyName, response.Results)
 			} else {
-				log.Errorf("<tsdb> Configuration of retention policy %s failed with status : %s ", mes.RetentionPolicyName, err.Error())
+				errText := ""
+				if response != nil {
+					errText = response.Err
+				}
+				log.Errorf("<tsdb> Configuration of retention policy %s failed with status : %s ", mes.RetentionPolicyName, errText)
 				pr.State = "INITIALIZED_WITH_ERRORS"
 			}
 		}
@@ -143,7 +147,7 @@ func (pr *Process) OnMessage(topic string, addr *fimpgo.Address , iotMsg *fimpgo
 
 		}
 	} else {
-		log.Debugf("<tsdb> Message from topic %s is skiped .", topic)
+		log.Tracef("<tsdb> Message from topic %s is skiped .", topic)
 	}
 }
 

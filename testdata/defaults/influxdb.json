@@ -1,32 +1,18 @@
 [
   {
-    "ID": 1,
-    "Name": "default",
+    "ID": 2,
+    "Name": "Default event storage",
     "MqttBrokerAddr": "tcp://localhost:1883",
-    "MqttClientID": "ecollector_1",
+    "MqttClientID": "",
     "MqttBrokerUsername": "",
     "MqttBrokerPassword": "",
     "InfluxAddr": "http://localhost:8086",
     "InfluxUsername": "",
     "InfluxPassword": "",
     "InfluxDB": "historian",
-    "BatchMaxSize": 100,
-    "SaveInterval": 1000,
-    "Filters": [
-      {
-        "ID": 1,
-        "Name": "exclude_vinculum_notify",
-        "MsgType": "evt.pd7.notify",
-        "IsAtomic": true,
-        "Negation": true
-      },{
-        "ID": 2,
-        "Name": "allow all",
-        "MsgType": "",
-        "IsAtomic": true,
-        "Negation": false
-      }
-    ],
+    "BatchMaxSize": 1000,
+    "SaveInterval": 5000,
+    "Filters": [],
     "Selectors": [
       {
         "ID": 1,
@@ -64,12 +50,12 @@
         "ID": "default",
         "Name": "",
         "UseServiceAsMeasurementName": true,
-        "RetentionPolicyName": "default_20w",
-        "RetentionPolicyDuration": "20w"
+        "RetentionPolicyName": "default_8w",
+        "RetentionPolicyDuration": "8w"
       }
     ],
     "Autostart": true,
-    "InitDb": true,
+    "InitDb": false,
     "SiteId": ""
   }
 ]

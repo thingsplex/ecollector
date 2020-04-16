@@ -5,16 +5,17 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/thingsplex/ecollector/model"
 	"github.com/thingsplex/ecollector/tsdb"
+	"os"
 	"strconv"
 )
 
 type AdminApi struct {
 	integr *tsdb.Integration
 	mqt *fimpgo.MqttTransport
-	configs model.Configs
+	configs *model.Configs
 }
 
-func NewAdminApi(integr *tsdb.Integration,configs model.Configs) *AdminApi {
+func NewAdminApi(integr *tsdb.Integration,configs *model.Configs) *AdminApi {
 	return &AdminApi{integr: integr,configs:configs}
 }
 
@@ -76,8 +77,6 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 		response := map[string]string{"op":op,"status":status,"error":errStr}
 		msg = fimpgo.NewStrMapMessage("evt.ecprocess.ctrl_report", "ecollector", response, nil, nil,iotMsg)
 
-	case "cmd.ecprocess.reset_to_default":
-
 	case "cmd.ecprocess.save_selector":
 
 	case "cmd.ecprocess.save_filter":
@@ -89,6 +88,11 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 	case "cmd.ecprocess.delete_selector":
 
 	case "cmd.ecprocess.delete_filter":
+
+	case "cmd.ecprocess.reset_to_default":
+		api.configs.LoadDefaults()
+		api.integr.ResetConfigsToDefault()
+		os.Exit(0)
 
 	case "cmd.tsdb.query":
 		val,err := iotMsg.GetStrMapValue()
@@ -185,10 +189,22 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 		response := map[string]string{"status":"ok","error":""}
 		msg = fimpgo.NewStrMapMessage("evt.tsdb.delete_object_report", "ecollector", response, nil, nil,iotMsg)
 		// set default retention policy
-	case "cmd.tsdb.set_defaults":
-		//
+
 	case "cmd.tsdb.get_configs":
 		//
+	case "cmd.log.set_level":
+		// Configure log level
+		level , err :=iotMsg.GetStringValue()
+		if err != nil {
+			return
+		}
+		logLevel, err := log.ParseLevel(level)
+		if err == nil {
+			log.SetLevel(logLevel)
+			api.configs.LogLevel = level
+			api.configs.SaveToFile()
+		}
+		log.Info("Log level updated to = ",logLevel)
 	}
 	if msg == nil {
 		return

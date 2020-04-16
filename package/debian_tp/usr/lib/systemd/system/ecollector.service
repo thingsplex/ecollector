@@ -3,7 +3,7 @@ Description=Event collector service
 
 [Service]
 Type=simple
-ExecStart=/opt/thingsplex/ecollector/ecollector -c config.json
+ExecStart=/opt/thingsplex/ecollector/ecollector
 User=ecollector
 WorkingDirectory=/opt/thingsplex/ecollector
 Restart=always

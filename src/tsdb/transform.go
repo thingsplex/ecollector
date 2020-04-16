@@ -11,11 +11,13 @@ import (
 func DefaultTransform(context *MsgContext, topic string,addr *fimpgo.Address, iotMsg *fimpgo.FimpMessage, domain string) (*influx.Point, error) {
 	tags := map[string]string{
 		"topic":  topic,
-		"domain": domain,
 		"location_id":"",
 		"service_id":"",
 		"dev_id":"",
 		"dev_type":"",
+	}
+	if domain != "-"{
+		tags["domain"] =domain
 	}
 
 	//log.Debugf("<trans> Tags %+v",tags)
@@ -45,7 +47,12 @@ func DefaultTransform(context *MsgContext, topic string,addr *fimpgo.Address, io
 				fields["value"] = val
 				fields["unit"] = unit
 				fields["consumption"] = true
+				context.measurementName = mName
+				valueType = "_skip_"
+			}else {
+				return nil,err
 			}
+
 		}else if iotMsg.Type == "cmd.meter_ext.get_report" {
 			mName = "electricity_meter_extended"
 			val , err := iotMsg.GetFloatMapValue()
@@ -70,9 +77,10 @@ func DefaultTransform(context *MsgContext, topic string,addr *fimpgo.Address, io
 			fields["i1"],_ = val["i1"]
 			fields["i2"],_ = val["i2"]
 			fields["i3"],_ = val["i3"]
+			context.measurementName = mName
+			valueType = "_skip_"
 		}
-		context.measurementName = mName
-		valueType = "_skip_"
+
 
 	case "thermostat":
 		if iotMsg.Type == "cmd.setpoint.set" || iotMsg.Type == "cmd.setpoint.report" {

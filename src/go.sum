@@ -16,6 +16,10 @@ github.com/futurehomeno/fimpgo v1.4.7-0.20190924195603-edc0cf37eef9 h1:y+tsxID98
 github.com/futurehomeno/fimpgo v1.4.7-0.20190924195603-edc0cf37eef9/go.mod h1:hVp7bMPj/wz4zejT6O0WCPCttKqSNn+72+n5Elu7wNI=
 github.com/futurehomeno/fimpgo v1.4.12-0.20200225115408-3bef8e50764d h1:MTJ9VDa2wqa1vXB7+uJAK67xT4cF2NkqGb6CJYuwjDc=
 github.com/futurehomeno/fimpgo v1.4.12-0.20200225115408-3bef8e50764d/go.mod h1:qWhd1VFe4yaePWcKzp7NuJqcX9PlzjEPfE+YTRZbCtA=
+github.com/futurehomeno/fimpgo v1.5.0 h1:G4YYjmL+9tkFhKDYhWUWPI9N7IdGQJI+Hz6FkexTYxo=
+github.com/futurehomeno/fimpgo v1.5.0/go.mod h1:qWhd1VFe4yaePWcKzp7NuJqcX9PlzjEPfE+YTRZbCtA=
+github.com/futurehomeno/fimpgo v1.5.1 h1:W5sw0WW5PJb8pMTM1exd1Su4ykAQLSiAIN9Z2OEPHVY=
+github.com/futurehomeno/fimpgo v1.5.1/go.mod h1:qWhd1VFe4yaePWcKzp7NuJqcX9PlzjEPfE+YTRZbCtA=
 github.com/google/uuid v1.1.1/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/influxdata/influxdb1-client v0.0.0-20190402204710-8ff2fc3824fc h1:KpMgaYJRieDkHZJWY3LMafvtqS/U8xX6+lUN+OKpl/Y=
 github.com/influxdata/influxdb1-client v0.0.0-20190402204710-8ff2fc3824fc/go.mod h1:qj24IKcXYK6Iy9ceXlo3Tc+vtHo9lIhSX5JddghvEPo=

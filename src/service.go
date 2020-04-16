@@ -1,15 +1,15 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	api2 "github.com/thingsplex/ecollector/api"
 	"github.com/thingsplex/ecollector/model"
 	"github.com/thingsplex/ecollector/tsdb"
+	"github.com/thingsplex/ecollector/utils"
 	"gopkg.in/natefinch/lumberjack.v2"
-	"io/ioutil"
+	"path/filepath"
 )
 
 func SetupLog(logfile string, level string, logFormat string) {
@@ -38,26 +38,36 @@ func SetupLog(logfile string, level string, logFormat string) {
 }
 
 func main() {
-	configs := model.Configs{}
-	var configFile string
-	flag.StringVar(&configFile, "c", "", "Config file")
+	var workDir string
+	flag.StringVar(&workDir, "c", "", "Work dir")
 	flag.Parse()
-	if configFile == "" {
-		configFile = "./config.json"
+	if workDir == "" {
+		workDir = "./"
 	} else {
-		fmt.Println("Loading configs from file ", configFile)
-	}
-	configFileBody, err := ioutil.ReadFile(configFile)
-	err = json.Unmarshal(configFileBody, &configs)
-	if err != nil {
-		fmt.Print(err)
-		panic("Can't load config file.")
+		fmt.Println("Work dir ", workDir)
 	}
 
+	configFile := filepath.Join(workDir,"data","config.json")
+	if !utils.FileExists(configFile) {
+		log.Info("Config file doesn't exist.Loading default config")
+		defaultConfigFile := filepath.Join(workDir,"defaults","config.json")
+		err := utils.CopyFile(defaultConfigFile,configFile)
+		if err != nil {
+			fmt.Print(err)
+			panic("Can't copy config file.")
+		}
+	}
+	log.Info("Loading main config file from ",configFile)
+	configs := model.NewConfigs(configFile,workDir)
+	err := configs.LoadFromFile()
+	if err != nil {
+		fmt.Print(err)
+		panic("Can't parse config file.")
+	}
 	SetupLog(configs.LogFile, configs.LogLevel, configs.LogFormat)
 	log.Info("--------------Starting ECollector-----------------")
 
-	integr := tsdb.Boot(&configs)
+	integr := tsdb.Boot(configs)
 
 	api := api2.NewAdminApi(integr,configs)
 	api.Start()

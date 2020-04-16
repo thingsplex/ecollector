@@ -21,7 +21,7 @@ type Integration struct {
 	processes []*Process
 	// in memmory copy of config file
 	processConfigs  []ProcessConfig
-	StoreLocation   string
+	workDir         string
 	storeFullPath   string
 	Name            string
 	diskMonitorTicker *time.Ticker
@@ -46,70 +46,30 @@ func (it *Integration) GetProcessByID(ID IDt) *Process {
 }
 
 // GetDefaultIntegrConfig returns default config .
-func (it *Integration) GetDefaultIntegrConfig() []ProcessConfig {
-
-	selector2 := []Selector{
-		{ID: 1, Topic: "pt:j1/mt:evt/rt:dev/#"},
-		{ID: 2, Topic: "pt:j1/mt:cmd/rt:dev/#"},
-		{ID: 3, Topic: "pt:j1/mt:evt/rt:app/#"},
-		{ID: 4, Topic: "pt:j1/mt:cmd/rt:app/#"},
-		{ID: 5, Topic: "pt:j1/mt:evt/rt:ad/#"},
-		{ID: 6, Topic: "pt:j1/mt:cmd/rt:ad/#"},
+func (it *Integration) GetDefaultIntegrConfig() ([]ProcessConfig,error) {
+	defaultConfigFile := filepath.Join(it.workDir,"defaults",it.Name+".json")
+	configFileBody, err := ioutil.ReadFile(defaultConfigFile)
+	var conf []ProcessConfig
+	if err != nil {
+		return nil,err
 	}
-
-	measurements2 := []Measurement{
-		{
-			ID:                      "default",
-			RetentionPolicyDuration: "20w",
-			RetentionPolicyName:     "default_20w",
-			UseServiceAsMeasurementName:true,
-		},
+	err = json.Unmarshal(configFileBody, &conf)
+	if err != nil {
+		return nil,err
 	}
-
-	filters := []Filter{
-		{
-			ID: 1,
-			Name: "exclude_vinculum_notify",
-			MsgType: "evt.pd7.notify",
-			IsAtomic: true,
-			Negation: true,
-		},{
-			ID: 2,
-			Name: "allow all",
-			MsgType: "",
-			IsAtomic: true,
-			Negation: false,
-		},
-	}
-
-	config2 := ProcessConfig{
-		ID:                 2,
-		Name:				"Default event storage",
-		MqttBrokerAddr:     "tcp://localhost:1883",
-		MqttBrokerUsername: "",
-		MqttBrokerPassword: "",
-		MqttClientID:       "ecollector_2",
-		InfluxAddr:         "http://localhost:8086",
-		InfluxUsername:     "",
-		InfluxPassword:     "",
-		InfluxDB:           "historian",
-		BatchMaxSize:       1000,
-		SaveInterval:       5000,
-		Filters: 			filters,
-		Selectors:          selector2,
-		Measurements:       measurements2,
-		SiteId:utils.GetFhSiteId(""),
-		Autostart:true,
-		InitDb:true,
-	}
-
-	return []ProcessConfig{config2}
+	return conf,nil
 
 }
 
 // Init initilizes integration app
 func (it *Integration) Init() {
-	it.storeFullPath = filepath.Join(it.StoreLocation, it.Name+".json")
+	it.storeFullPath = filepath.Join(it.workDir,"data","proc",it.Name+".json")
+	if !utils.FileExists(it.storeFullPath) {
+		err := utils.CopyFile(filepath.Join(it.workDir,"defaults",it.Name+".json"),it.storeFullPath)
+		if err != nil {
+			log.Error("Failed to load integration default template , Err:",err.Error())
+		}
+	}
 }
 
 // SetConfig config setter
@@ -135,7 +95,7 @@ func (it *Integration) LoadConfig() error {
 		it.configSaveMutex = &sync.Mutex{}
 	}
 	if _, err := os.Stat(it.storeFullPath); os.IsNotExist(err) {
-		it.processConfigs = it.GetDefaultIntegrConfig()
+		it.processConfigs,err = it.GetDefaultIntegrConfig()
 		log.Info("Integration configuration is loaded from default.")
 		return it.SaveConfigs()
 	}
@@ -158,9 +118,13 @@ func (it *Integration) ResetConfigsToDefault() error {
 	for i := range it.processes {
 		it.processes[i].Stop()
 	}
+	var err error
 	it.processes = it.processes[:0]
-	it.processConfigs = it.GetDefaultIntegrConfig()
-	err := it.SaveConfigs()
+	it.processConfigs,err = it.GetDefaultIntegrConfig()
+	if err != nil {
+		return err
+	}
+	err = it.SaveConfigs()
 	if err != nil {
 		log.Error("Error while saving the config:",err)
 	}else {
@@ -173,7 +137,7 @@ func (it *Integration) ResetConfigsToDefault() error {
 
 // SaveConfigs saves configs to json file
 func (it *Integration) SaveConfigs() error {
-	if it.StoreLocation != "" {
+	if it.storeFullPath != "" {
 
 		it.configSaveMutex.Lock()
 		defer func() {
@@ -186,7 +150,7 @@ func (it *Integration) SaveConfigs() error {
 		return ioutil.WriteFile(it.storeFullPath, payload, 0777)
 
 	}
-	log.Info("Save to disk was skipped , StoreLocation is empty")
+	log.Info("Save to disk was skipped , storeFullPath is empty")
 	return nil
 }
 
@@ -204,9 +168,8 @@ func (it *Integration) InitProcesses() error {
 		it.InitNewProcess(&it.processConfigs[i])
 	}
 	//Initializing shared metadata store.The store is shared between processes.
-	mqt := fimpgo.NewMqttTransport(it.processConfigs[0].MqttBrokerAddr,it.processConfigs[0].MqttClientID,it.processConfigs[0].MqttBrokerUsername, it.processConfigs[0].MqttBrokerPassword,true,1,1)
+	mqt := fimpgo.NewMqttTransport(it.processConfigs[0].MqttBrokerAddr,it.processConfigs[0].MqttClientID+"-vinc-mstore",it.processConfigs[0].MqttBrokerUsername, it.processConfigs[0].MqttBrokerPassword,true,1,1)
 	mqt.Start()
-	//TODO:subscribe to vinculum topic
 	it.serviceMedataStore = metadata.NewVincMetadataStore(mqt)
 	it.serviceMedataStore.Start()
 	return nil
@@ -236,7 +199,10 @@ func (it *Integration) InitNewProcess(procConfig *ProcessConfig) error {
 
 // AddProcess adds new process .
 func (it *Integration) AddProcess(procConfig ProcessConfig) (IDt, error) {
-	defaultProc := it.GetDefaultIntegrConfig()
+	defaultProc,err := it.GetDefaultIntegrConfig()
+	if err != nil {
+		return 0, err
+	}
 	procConfig.ID = GetNewID(it.processConfigs)
 	if len(procConfig.Filters) == 0 {
 		procConfig.Filters = defaultProc[0].Filters
@@ -291,10 +257,11 @@ func (it *Integration) StartDiskMonitor() {
 				continue
 			}
 			if info.UsedPercent > it.DiskMonitorShutdownLimit {
-				log.Error("!!!!! DISK LOW SPACE !!!! Stopping all processes ")
+				log.Errorf("!!!!! DISK LOW SPACE !!!! Stopping all processes . Disk usage = %f",info.UsedPercent)
 				for i := range it.processes {
 					it.processes[i].Stop()
 				}
+				it.serviceMedataStore.Stop()
 			}
 		}
 		log.Error("!!!!! DISK MONITOR HAS STOPPED !!!! ")
@@ -305,24 +272,23 @@ func (it *Integration) StartDiskMonitor() {
 // Boot initializes integration
 func Boot(mainConfig *model.Configs) *Integration {
 	log.Info("<tsdb>Booting InfluxDB integration ")
-	if mainConfig.ProcConfigStorePath == "" {
+	if mainConfig.WorkDirectory == "" {
 		log.Info("<tsdb> Config path path is not defined  ")
 		return nil
 	}
 	log.Info("<tsdb> Connected  ")
 	//hubDataUpdated := vincClient.InfraClient.RegisterMessageSubscriber()
 	//vincDb := vincClient.GetInfrastructure()
-
-	integr := Integration{Name: "influxdb", StoreLocation: mainConfig.ProcConfigStorePath,DiskMonitorShutdownLimit: mainConfig.DiskMonitorShutdownLimit,DisableDiskMonitor: mainConfig.DisableDiskMonitor}
+	if mainConfig.DiskMonitorShutdownLimit == 0 {
+		mainConfig.DiskMonitorShutdownLimit = 85
+	}
+	integr := Integration{Name: "influxdb", workDir: mainConfig.WorkDirectory,DiskMonitorShutdownLimit: mainConfig.DiskMonitorShutdownLimit,DisableDiskMonitor: mainConfig.DisableDiskMonitor}
 	log.Info("<tsdb> Initializing integration  ")
 	integr.Init()
 	log.Info("<tsdb> Loading configs  ")
 	integr.LoadConfig()
 	log.Info("<tsdb> Initializing processes ")
 	integr.InitProcesses()
-	if mainConfig.DiskMonitorShutdownLimit == 0 {
-		mainConfig.DiskMonitorShutdownLimit = 85
-	}
 	if !mainConfig.DisableDiskMonitor {
 		log.Info("<tsdb> Starting disk monitor ")
 		integr.StartDiskMonitor()
