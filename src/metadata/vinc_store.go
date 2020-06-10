@@ -22,7 +22,7 @@ func (r *VincMetadataStore) Start() error {
 	r.vApi  = primefimp.NewApiClient("ecollector",r.mqt,false)
 	r.vApi.StartNotifyRouter()
 
-	return r.vApi.ReloadSiteToCache(5)
+	return r.vApi.ReloadSiteToCache(30)
 }
 
 func (r *VincMetadataStore) Stop() error {
@@ -31,6 +31,9 @@ func (r *VincMetadataStore) Stop() error {
 }
 
 func (r *VincMetadataStore) GetMetadataByAddress(topic string) (ServiceMetaRec , error) {
+	if !strings.Contains(topic,"rt:dev") {
+		return ServiceMetaRec{},fmt.Errorf("not device")
+	}
 	address := strings.Replace(topic,"pt:j1/mt:evt","",1)
 	address = strings.Replace(address,"pt:j1/mt:cmd","",1)
 	log.Tracef("Doing lookup of %s",address)

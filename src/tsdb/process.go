@@ -70,29 +70,57 @@ func (pr *Process) Init() error {
 		}
 		// Setting up retention policies
 		log.Info("Setting up retention policies")
-		for _, mes := range pr.GetMeasurements() {
-			if mes.RetentionPolicyName == "" {
-				mes.RetentionPolicyName = fmt.Sprintf("bf_%s", mes.ID)
-			}
-			q := influx.NewQuery(fmt.Sprintf("CREATE RETENTION POLICY %s ON %s DURATION %s REPLICATION 1", mes.RetentionPolicyName, pr.Config.InfluxDB, mes.RetentionPolicyDuration), pr.Config.InfluxDB, "")
-			if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
-				log.Infof("<tsdb> Retention policy %s was created with status :%s", mes.RetentionPolicyName, response.Results)
-			} else {
-				errText := ""
-				if response != nil {
-					errText = response.Err
-				}
-				log.Errorf("<tsdb> Configuration of retention policy %s failed with status : %s ", mes.RetentionPolicyName, errText)
-				pr.State = "INITIALIZED_WITH_ERRORS"
-			}
-		}
+		// This is old version of creating retention policies
+		//for _, mes := range pr.GetMeasurements() {
+		//	if mes.RetentionPolicyName == "" {
+		//		mes.RetentionPolicyName = fmt.Sprintf("bf_%s", mes.ID)
+		//	}
+		//	q := influx.NewQuery(fmt.Sprintf("CREATE RETENTION POLICY %s ON %s DURATION %s REPLICATION 1", mes.RetentionPolicyName, pr.Config.InfluxDB, mes.RetentionPolicyDuration), pr.Config.InfluxDB, "")
+		//	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
+		//		log.Infof("<tsdb> Retention policy %s was created with status :%s", mes.RetentionPolicyName, response.Results)
+		//	} else {
+		//		errText := ""
+		//		if response != nil {
+		//			errText = response.Err
+		//		}
+		//		log.Errorf("<tsdb> Configuration of retention policy %s failed with status : %s ", mes.RetentionPolicyName, errText)
+		//		pr.State = "INITIALIZED_WITH_ERRORS"
+		//	}
+		//}
+
+		// CQ buckets
+		pr.AddRetentionPolicy("gen_year","240w")  // 1-5 years from last 5 years
+		pr.AddRetentionPolicy("gen_month","48w") // 1-12 month from last year
+		pr.AddRetentionPolicy("gen_week","12w") // 1-4 weeks from last 3 month
+		pr.AddRetentionPolicy("gen_day","2w")   // 1-3 days from last month
+		// Default bucket for high frequency measurements
+		pr.AddRetentionPolicy("gen_raw","4w")   // 1-2 days from last week
+		// Default bucket for slow measurements
+		pr.AddRetentionPolicy("default_20w","12w") //
+
+		log.Info("Setting up CQ ")
+
+		pr.DeleteCQ("raw_to_day")
+		pr.DeleteCQ("day_to_week")
+		pr.DeleteCQ("week_to_month")
+		pr.DeleteCQ("month_to_year")
+
+		pr.AddCQ("raw_to_day","gen_raw","gen_day","1m")
+		//pr.AddCQ("day_to_week","gen_week","10m")
+		//pr.AddCQ("week_to_month","gen_month","1h")
+		//pr.AddCQ("month_to_year","gen_year","1d")
+
 	}else {
 		log.Info("<tsdb> Database initialization is skipped.(turned off in config)")
 
 	}
 
 	pr.batchPoints = make(map[string]influx.BatchPoints)
-	err = pr.InitBatchPoint("")
+	err = pr.InitBatchPoint("gen_raw")
+	if err != nil {
+		log.Error("<tsdb> Can't init batch points . Error: ", err)
+	}
+	err = pr.InitBatchPoint("default_20w")
 	if err != nil {
 		log.Error("<tsdb> Can't init batch points . Error: ", err)
 	}
@@ -135,12 +163,14 @@ func (pr *Process) OnMessage(topic string, addr *fimpgo.Address , iotMsg *fimpgo
 		}else {
 			log.Debug("No metadata found")
 		}
-		msg, err := pr.transform(context, topic,addr, iotMsg, addr.GlobalPrefix)
+		points, err := pr.transform(context, topic,addr, iotMsg, addr.GlobalPrefix)
 		if err != nil {
 			log.Errorf("<tsdb> Transformation error: %s", err)
 		} else {
-			if msg != nil {
-				pr.write(context, msg)
+			if points != nil {
+				for i := range points {
+					pr.write(context, points[i])
+				}
 			} else {
 				log.Debug("<tsdb> Message can't be mapped .Skipping .")
 			}
@@ -158,17 +188,18 @@ func (pr *Process) AddMessage(topic string, addr *fimpgo.Address , iotMsg *fimpg
 	// log.Debugf("New msg of class = %s", iotMsg.Class
 	context := &MsgContext{time:modTime}
 	if pr.filter(context, topic, iotMsg, addr.GlobalPrefix, 0) {
-		msg, err := pr.transform(context, topic,addr, iotMsg, addr.GlobalPrefix)
+		points, err := pr.transform(context, topic,addr, iotMsg, addr.GlobalPrefix)
 
 		if err != nil {
 			log.Errorf("<tsdb> Transformation error: %s", err)
 		} else {
-			if msg != nil {
-				pr.write(context, msg)
+			if points != nil {
+				for i := range points {
+					pr.write(context, points[i])
+				}
 			} else {
 				log.Debug("<tsdb> Message can't be mapped .Skipping .")
 			}
-
 		}
 	} else {
 		log.Debugf("<tsdb> Message from topic %s is skiped .", topic)
@@ -180,20 +211,10 @@ func (pr *Process) AddMessage(topic string, addr *fimpgo.Address , iotMsg *fimpg
 func (pr *Process) filter(context *MsgContext, topic string, iotMsg *fimpgo.FimpMessage, domain string, filterID IDt) bool {
 	var result bool
 	// no filters defines , everything is allowed
-	if len(pr.Config.Filters)==0 {
-		measure := pr.Config.getMeasurementByID("default")
-		context.measurementName = iotMsg.Service+"."+iotMsg.Type
-		if measure == nil {
-			log.Errorf("<tsdb> Measurement either is not defined or provided ID is wrong.")
-			return false
-		}
-		context.measurement = measure
-		return true
-	}
+
 	for i := range pr.Config.Filters {
 		if (pr.Config.Filters[i].IsAtomic && filterID == 0) || (pr.Config.Filters[i].ID == filterID) {
 			result = true
-			//////////////////////////////////////////////////////////
 			if pr.Config.Filters[i].Topic != "" {
 				if topic != pr.Config.Filters[i].Topic {
 					result = false
@@ -215,7 +236,6 @@ func (pr *Process) filter(context *MsgContext, topic string, iotMsg *fimpgo.Fimp
 				}
 			}
 
-			////////////////////////////////////////////////////////////
 			if pr.Config.Filters[i].Negation {
 				result = !(result)
 			}
@@ -232,74 +252,42 @@ func (pr *Process) filter(context *MsgContext, topic string, iotMsg *fimpgo.Fimp
 
 				}
 			}
-
-			//////////////////////////////////////////////////////////////
-			if result {
-				context.filterID = pr.Config.Filters[i].ID
-				meshID := "default"
-				if pr.Config.Filters[i].MeasurementID != "" {
-					meshID = pr.Config.Filters[i].MeasurementID
-				}
-				measure := pr.Config.getMeasurementByID(meshID)
-				if measure == nil {
-					log.Errorf("<tsdb> Measurement either is not defined or provided ID is wrong.")
-					return false
-				}
-				context.measurement = measure
-				if measure.UseServiceAsMeasurementName {
-					context.measurementName = iotMsg.Service+"."+iotMsg.Type
-				}else {
-					context.measurementName = measure.Name
-				}
-				// log.Debugf("There is match with filter %+v", filter)
-				return true
-			}else {
-				return false
-			}
-			if filterID != 0 {
-				break
-			}
-
+			return result
 		}
 	}
 
 	return false
 }
 
-func (pr *Process) getRetentionPolicyName(measurementName string ) string {
-	for i := range pr.Config.Measurements {
-		if pr.Config.Measurements[i].ID == measurementName {
-			return pr.Config.Measurements[i].RetentionPolicyName
-		}
-	}
-	return "default"
-}
 
-func (pr *Process) write(context *MsgContext, point *influx.Point) {
-	log.Debugf("<tsdb> Writing measurement: %s", context.measurementName)
+
+func (pr *Process) write(context *MsgContext, point *DataPoint) {
 	// log.Debugf("Point: %+v", point)
+	rpName := pr.getRetentionPolicyName(point.MeasurementName)
+	log.Debugf("<tsdb> Writing measurement: %s into %s", point.Point.Name(),rpName)
 	if context.measurementName != "" {
 		pr.writeMutex.Lock()
-		pr.batchPoints[context.measurement.ID].AddPoint(point)
+		pr.batchPoints[rpName].AddPoint(point.Point)
 		pr.writeMutex.Unlock()
-		if len(pr.batchPoints[context.measurement.ID].Points()) >= pr.Config.BatchMaxSize {
+		if len(pr.batchPoints[rpName].Points()) >= pr.Config.BatchMaxSize {
 			pr.WriteIntoDb()
 		}
 	}
 }
 
-func (pr *Process) writeMultiple(context *MsgContext, point []*influx.Point) {
-	log.Debugf("<tsdb> Writing measurement: %s", context.measurementName)
-	// log.Debugf("Point: %+v", point)
-	if context.measurementName != "" {
-		pr.writeMutex.Lock()
-		pr.batchPoints[context.measurement.ID].AddPoints(point)
-		pr.writeMutex.Unlock()
-		if len(pr.batchPoints[context.measurement.ID].Points()) >= pr.Config.BatchMaxSize {
-			pr.WriteIntoDb()
-		}
-	}
-}
+//func (pr *Process) writeMultiple(context *MsgContext, point []*influx.Point) {
+//	rpName := pr.getRetentionPolicyName(context.measurementName)
+//	log.Debugf("<tsdb> Writing measurements: %s into %s", context.measurementName,rpName)
+//	// log.Debugf("Point: %+v", point)
+//	if context.measurementName != "" {
+//		pr.writeMutex.Lock()
+//		pr.batchPoints[rpName].AddPoints(point)
+//		pr.writeMutex.Unlock()
+//		if len(pr.batchPoints[rpName].Points()) >= pr.Config.BatchMaxSize {
+//			pr.WriteIntoDb()
+//		}
+//	}
+//}
 
 // Configure should be used to replace new set of filters and selectors with new set .
 // Process should be restarted after Configure call
@@ -314,26 +302,26 @@ func (pr *Process) Configure(procConfig ProcessConfig, doRestart bool) error {
 	return nil
 }
 
+func (pr *Process) getRetentionPolicyName(mName string ) string {
+	if mName == "electricity_meter_power" ||
+		mName == "electricity_meter_energy" ||
+		mName == "electricity_meter_ext" ||
+		strings.Contains(mName,"sensor_") {
+		return "gen_raw"
+	}
+	return "default_20w"
+}
+
 // InitBatchPoint initializes new batch point or resets existing one .
 func (pr *Process) InitBatchPoint(bpName string) error {
-	measurements := pr.GetMeasurements()
-	var retentionPolicyName string
 	var err error
-
-	for mi := range measurements {
-		if measurements[mi].ID == bpName || bpName == "" {
-			retentionPolicyName = measurements[mi].RetentionPolicyName
-			// Create a new point batch
-			pr.batchPoints[measurements[mi].ID], err = influx.NewBatchPoints(influx.BatchPointsConfig{
+	// Create a new point batch
+	log.Debugf("Init new batch point %s",bpName)
+	pr.batchPoints[bpName], err = influx.NewBatchPoints(influx.BatchPointsConfig{
 				Database:        pr.Config.InfluxDB,
 				Precision:       "ns",
-				RetentionPolicy: retentionPolicyName,
-			})
-			if bpName != "" {
-				return err
-			}
-		}
-	}
+				RetentionPolicy: bpName,
+	})
 
 	return err
 }
@@ -425,12 +413,13 @@ func (pr *Process) Start() error {
 	for _, selector := range pr.Config.Selectors {
 		pr.mqttTransport.Subscribe(selector.Topic)
 	}
-	if pr.State == "INITIALIZED"{
-		pr.State = "RUNNING"
-	}
+
 	if pr.serviceMedataStore == nil {
 		pr.serviceMedataStore = metadata.NewVincMetadataStore(pr.mqttTransport)
 		pr.serviceMedataStore.Start()
+	}
+	if pr.State == "INITIALIZED"{
+		pr.State = "RUNNING"
 	}
 	//pr.serviceMedataStore = metadata.NewTpMetadataStore(pr.mqttTransport)
 	//pr.serviceMedataStore.LoadFromTpRegistry()
@@ -460,107 +449,7 @@ func (pr *Process) Stop() error {
 	return nil
 }
 
-func (pr *Process) RunQuery(query string) *influx.Response {
-	q := influx.NewQuery(query, pr.Config.InfluxDB, "s")
-	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
-		log.Trace(response.Results)
-		return response
-	}else {
-		log.Error(response.Error())
-		return response
-	}
 
-}
 
-func (pr *Process) UpdateRetentionPolicy(name,duration string) {
-	log.Info("Altering retention policy")
-	var query = fmt.Sprintf("ALTER RETENTION POLICY %s ON %s DURATION %s", name, pr.Config.InfluxDB, duration)
-	q := influx.NewQuery(query, pr.Config.InfluxDB, "s")
-	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
-		log.Debug(response.Results)
-	}else {
-		log.Error(response.Error())
-	}
 
-}
-
-func (pr *Process) AddRetentionPolicy(name,duration string) {
-	log.Info("Adding retention policy")
-	var query = fmt.Sprintf("CREATE RETENTION POLICY %s ON %s DURATION %s", name, pr.Config.InfluxDB, duration)
-	q := influx.NewQuery(query, pr.Config.InfluxDB, "s")
-	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
-		log.Debug(response.Results)
-	}else {
-		log.Error(response.Error())
-	}
-
-}
-
-func (pr *Process) DeleteRetentionPolicy(name string) {
-	log.Infof("Deleting retention policy %s",name)
-	var query = fmt.Sprintf("DROP RETENTION POLICY %s ON %s", name, pr.Config.InfluxDB)
-	q := influx.NewQuery(query, pr.Config.InfluxDB, "s")
-	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
-		log.Debug(response.Results)
-	}else {
-		log.Error(response.Error())
-	}
-
-}
-
-func (pr *Process) DeleteMeasurement(name string) {
-	log.Infof("Deleting measurement %s",name)
-	var query = fmt.Sprintf("DROP MEASUREMENT \"%s\" ", name)
-	q := influx.NewQuery(query, pr.Config.InfluxDB, "s")
-	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
-		log.Debug(response.Results)
-	}else {
-		log.Error(response.Error())
-	}
-
-}
-
-// Return list of measurements from db
-func (pr *Process) GetDbMeasurements() []string {
-	q := influx.NewQuery("SHOW MEASUREMENTS", pr.Config.InfluxDB, "ms")
-	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
-		//log.Debug(response.Results)
-		if len(response.Results) > 0 {
-			if len(response.Results[0].Series)>0 {
-				var result []string
-				for i := range response.Results[0].Series[0].Values {
-					result = append(result,response.Results[0].Series[0].Values[i][0].(string))
-				}
-				return result
-			}
-		}
-		return nil
-	}else {
-		log.Error(err)
-		log.Error(response.Error())
-	}
-	return nil
-}
-
-// Return list of measurements from db
-func (pr *Process) GetDbRetentionPolicies() []string {
-	q := influx.NewQuery("SHOW RETENTION POLICIES", pr.Config.InfluxDB, "ms")
-	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
-		//log.Debug(response.Results)
-		if len(response.Results) > 0 {
-			if len(response.Results[0].Series)>0 {
-				var result []string
-				for i := range response.Results[0].Series[0].Values {
-					result = append(result,response.Results[0].Series[0].Values[i][0].(string))
-				}
-				return result
-			}
-		}
-		return nil
-	}else {
-		log.Error(err)
-		log.Error(response.Error())
-	}
-	return nil
-}
 

@@ -9,7 +9,7 @@ import (
 )
 
 // Transform defines function which converts IotMsg into influx data point
-type Transform func(context *MsgContext, topic string,addr *fimpgo.Address, iotMsg *fimpgo.FimpMessage, domain string) (*influx.Point, error)
+type Transform func(context *MsgContext, topic string,addr *fimpgo.Address, iotMsg *fimpgo.FimpMessage, domain string) ([]*DataPoint, error)
 
 // IDt defines type of struct ID
 type IDt int
@@ -21,6 +21,11 @@ type MsgContext struct {
 	measurementName string
 	time time.Time
 	metadata *metadata2.ServiceMetaRec
+}
+
+type DataPoint struct {
+	MeasurementName string
+	Point *influx.Point
 }
 
 // Selector defines message selector.

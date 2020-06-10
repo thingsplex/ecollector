@@ -185,6 +185,7 @@ func (it *Integration) InitNewProcess(procConfig *ProcessConfig) error {
 		if err == nil {
 			log.Infof("Process ID=%d was initialized.", procConfig.ID)
 			err := proc.Start()
+			log.Infof("Process ID=%d is started.", procConfig.ID)
 			if err != nil {
 				log.Errorf("Process ID=%d failed to start . Error : %s", procConfig, err)
 			}
