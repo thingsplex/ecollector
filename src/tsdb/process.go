@@ -70,23 +70,6 @@ func (pr *Process) Init() error {
 		}
 		// Setting up retention policies
 		log.Info("Setting up retention policies")
-		// This is old version of creating retention policies
-		//for _, mes := range pr.GetMeasurements() {
-		//	if mes.RetentionPolicyName == "" {
-		//		mes.RetentionPolicyName = fmt.Sprintf("bf_%s", mes.ID)
-		//	}
-		//	q := influx.NewQuery(fmt.Sprintf("CREATE RETENTION POLICY %s ON %s DURATION %s REPLICATION 1", mes.RetentionPolicyName, pr.Config.InfluxDB, mes.RetentionPolicyDuration), pr.Config.InfluxDB, "")
-		//	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
-		//		log.Infof("<tsdb> Retention policy %s was created with status :%s", mes.RetentionPolicyName, response.Results)
-		//	} else {
-		//		errText := ""
-		//		if response != nil {
-		//			errText = response.Err
-		//		}
-		//		log.Errorf("<tsdb> Configuration of retention policy %s failed with status : %s ", mes.RetentionPolicyName, errText)
-		//		pr.State = "INITIALIZED_WITH_ERRORS"
-		//	}
-		//}
 
 		// CQ buckets
 		pr.AddRetentionPolicy("gen_year","240w")  // 1-5 years from last 5 years
@@ -94,7 +77,7 @@ func (pr *Process) Init() error {
 		pr.AddRetentionPolicy("gen_week","12w") // 1-4 weeks from last 3 month
 		pr.AddRetentionPolicy("gen_day","2w")   // 1-3 days from last month
 		// Default bucket for high frequency measurements
-		pr.AddRetentionPolicy("gen_raw","4w")   // 1-2 days from last week
+		pr.AddRetentionPolicy("gen_raw","2w")   // 1-2 days from last week
 		// Default bucket for slow measurements
 		pr.AddRetentionPolicy("default_20w","12w") //
 
@@ -106,9 +89,10 @@ func (pr *Process) Init() error {
 		pr.DeleteCQ("month_to_year")
 
 		pr.AddCQ("raw_to_day","gen_raw","gen_day","1m")
-		//pr.AddCQ("day_to_week","gen_week","10m")
-		//pr.AddCQ("week_to_month","gen_month","1h")
-		//pr.AddCQ("month_to_year","gen_year","1d")
+		pr.AddCQ("day_to_week","gen_day","gen_week","10m")
+		pr.AddCQ("week_to_month","gen_week","gen_month","1h")
+		pr.AddCQ("month_to_year","gen_month","gen_year","1d")
+
 
 	}else {
 		log.Info("<tsdb> Database initialization is skipped.(turned off in config)")
@@ -260,7 +244,7 @@ func (pr *Process) filter(context *MsgContext, topic string, iotMsg *fimpgo.Fimp
 }
 
 
-
+// write - writes data points into batch point
 func (pr *Process) write(context *MsgContext, point *DataPoint) {
 	// log.Debugf("Point: %+v", point)
 	rpName := pr.getRetentionPolicyName(point.MeasurementName)

@@ -50,29 +50,6 @@ func (pr *Process) RemoveSelector(ID IDt) {
 	}
 }
 
-// AddMeasurement adds new Measurement
-func (pr *Process) AddMeasurement(measurement Measurement) string {
-	defer func() {
-		pr.apiMutex.Unlock()
-	}()
-	pr.apiMutex.Lock()
-	pr.Config.Measurements = append(pr.Config.Measurements, measurement)
-	pr.InitBatchPoint(measurement.ID)
-	return measurement.ID
-}
-
-// RemoveMeasurement removes 1 filter entry by ID
-func (pr *Process) RemoveMeasurement(ID string) {
-	defer func() {
-		pr.apiMutex.Unlock()
-	}()
-	pr.apiMutex.Lock()
-	for i := range pr.Config.Measurements {
-		if pr.Config.Measurements[i].ID == ID {
-			pr.Config.Measurements = append(pr.Config.Measurements[:i], pr.Config.Measurements[i+1:]...)
-		}
-	}
-}
 
 // GetFilters returns all filters
 func (pr *Process) GetFilters() []Filter {
@@ -82,9 +59,4 @@ func (pr *Process) GetFilters() []Filter {
 // GetSelectors return all selectors
 func (pr *Process) GetSelectors() []Selector {
 	return pr.Config.Selectors
-}
-
-// GetMeasurements return all measurements
-func (pr *Process) GetMeasurements() []Measurement {
-	return pr.Config.Measurements
 }

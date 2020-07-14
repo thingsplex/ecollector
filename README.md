@@ -19,7 +19,7 @@ Measurements : sensors , electricity_meter_power , electricity_meter_energy
 | gen_month | 1-12 month for last year    | 1 hour avg  | 1 year    |
 | gen_week  | 1-4 weeks for  last 3 month | 10 min avg  | 3 month   |
 | gen_day   | 1-3 days for last 2 weeks   | 1 min avg   | 2 weeks   |
-| gen_raw   | 1-2 days for last 2 weeks   | none        | 1 month   |  
+| gen_raw   | 1-2 days for last 2 weeks   | none        | 2 weeks   |  
 
 ecollector -> `gen_raw` -> CQ -> `gen_day` -> CQ -> `gen_week` -> CQ -> `gen_month` -> CQ -> `gen_year` 
 
@@ -30,6 +30,20 @@ if  (`to`-`from`) < `7days` AND (now() - `from`)< `month` use `gen_day`
 Measurements : all others 
 
 Retention : 3 months , name - `default_w20`  
+
+## Query API 
+
+query params : 
+
+1. measurement name
+2. start timestamp 
+3. end timestamp  
+4. resolution , optional , default =`auto` 
+5. missing data, optional , default = `previous`   
+6. aggregation function , optional,default = `mean` 
+7. group field , optional , default = `device`
+
+calculate retention policy using `end timestamp` - `start timestamp` and values from `expected query range` column 
 
 **Message processing pipeline** : 
 ````

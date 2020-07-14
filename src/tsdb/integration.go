@@ -211,9 +211,7 @@ func (it *Integration) AddProcess(procConfig ProcessConfig) (IDt, error) {
 	if len(procConfig.Selectors) == 0 {
 		procConfig.Selectors = defaultProc[0].Selectors
 	}
-	if len(procConfig.Measurements) == 0 {
-		procConfig.Measurements = defaultProc[0].Measurements
-	}
+
 	it.processConfigs = append(it.processConfigs, procConfig)
 	it.SaveConfigs()
 	return procConfig.ID, it.InitNewProcess(&procConfig)

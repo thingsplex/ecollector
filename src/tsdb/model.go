@@ -93,19 +93,9 @@ type ProcessConfig struct {
 	SaveInterval time.Duration
 	Filters      []Filter
 	Selectors    []Selector
-	Measurements []Measurement
 	Autostart    bool
 	InitDb       bool
 	SiteId       string
-}
-
-func (pc *ProcessConfig) getMeasurementByID(ID string)*Measurement {
-	for i := range pc.Measurements {
-		if pc.Measurements[i].ID == ID {
-			return &pc.Measurements[i]
-		}
-	}
-	return nil
 }
 
 //ProcessConfigs is a collection of ProcessConfigs
