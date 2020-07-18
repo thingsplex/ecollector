@@ -53,49 +53,18 @@ func TestIntegration(t *testing.T) {
 			ID:       3,
 			MsgType: "evt.meter.report",
 			IsAtomic: true,
-		},Filter{
+		}, Filter{
 			ID:       4,
 			MsgType: "evt.open.report",
 			IsAtomic: true,
-		},Filter{
+		}, Filter{
 			ID:       5,
 			MsgType: "evt.presence.report",
 			IsAtomic: true,
 		},
 	}
 
-	measurements := []Measurement{
-		Measurement{
-			ID:                      "sensor_temp",
-			RetentionPolicyDuration: "8w",
-			RetentionPolicyName:     "bf_sensor_temp",
-		},
-		Measurement{
-			ID:                      "sensor_lumin",
-			RetentionPolicyDuration: "8w",
-			RetentionPolicyName:     "bf_sensor_lumin",
-		},
-		Measurement{
-			ID:                      "sensor_presence",
-			RetentionPolicyDuration: "8w",
-			RetentionPolicyName:     "bf_sensor_presence",
-		},
-		Measurement{
-			ID:                      "sensor_contact",
-			RetentionPolicyDuration: "8w",
-			RetentionPolicyName:     "sensor_contact",
-		},
-		Measurement{
-			ID:                      "meter_elec",
-			RetentionPolicyDuration: "8w",
-			RetentionPolicyName:     "bf_meter_elec",
-		},
-		Measurement{
-			ID:                      "default",
-			RetentionPolicyDuration: "8w",
-			RetentionPolicyName:     "bf_default",
-		},
-	}
+
 
 	config1 := ProcessConfig{
 		ID:                 1,
@@ -111,7 +80,6 @@ func TestIntegration(t *testing.T) {
 		SaveInterval:       1000,
 		Filters:            filters,
 		Selectors:          selector,
-		Measurements:       measurements,
 	}
 	config2 := ProcessConfig{
 		ID:                 2,
@@ -127,7 +95,6 @@ func TestIntegration(t *testing.T) {
 		SaveInterval:       1000,
 		Filters:            filters,
 		Selectors:          selector,
-		Measurements:       measurements,
 	}
 
 	integr := Integration{Name: "influxdb", StoreLocation: ""}

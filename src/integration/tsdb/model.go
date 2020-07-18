@@ -16,11 +16,10 @@ type IDt int
 
 // MsgContext describes metadata collected along message goint throughout the pipeline  .
 type MsgContext struct {
-	filterID IDt
-	measurement *Measurement
+	filterID        IDt
 	measurementName string
-	time time.Time
-	metadata *metadata2.ServiceMetaRec
+	time            time.Time
+	metadata        *metadata2.ServiceMetaRec
 }
 
 type DataPoint struct {
@@ -38,12 +37,12 @@ type Selector struct {
 // Filter defines message filter.
 // Emty string - means no filter.
 type Filter struct {
-	ID          IDt
-	Name        string
-	Topic       string
-	Domain      string
-	Service    string
-	MsgType     string
+	ID      IDt
+	Name    string
+	Topic   string
+	Domain  string
+	Service string
+	MsgType string
 	// If true then returns everything but matching value
 	Negation bool
 	// Boolean operation between 2 filters , supported values : and , or
@@ -56,21 +55,6 @@ type Filter struct {
 	MeasurementID string
 	// definies if filter is temporary and can be stored in memory or persisted to disk
 	InMemory bool
-}
-
-// Measurement stores measurement specific configs like retention policy
-type Measurement struct {
-	ID string
-	// db measurement name .
-	Name string
-
-	// If flag is set , message.Service is used as measurement name otherwise ID is used instead
-	UseServiceAsMeasurementName bool
-	//
-	// Normally should be combination of ID + RetentionPolicy
-	RetentionPolicyName string
-	// Have to be in format 1d , 1w , 1h .
-	RetentionPolicyDuration string
 }
 
 // ProcessConfig process configuration
@@ -96,6 +80,7 @@ type ProcessConfig struct {
 	Autostart    bool
 	InitDb       bool
 	SiteId       string
+	Profile      string // simple , optimized
 }
 
 //ProcessConfigs is a collection of ProcessConfigs

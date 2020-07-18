@@ -71,15 +71,6 @@
         "InMemory": false
       }
     ],
-    "Measurements": [
-      {
-        "ID": "default",
-        "Name": "",
-        "UseServiceAsMeasurementName": true,
-        "RetentionPolicyName": "default_20w",
-        "RetentionPolicyDuration": "12w"
-      }
-    ],
     "Autostart": true,
     "InitDb": true,
     "SiteId": "-"

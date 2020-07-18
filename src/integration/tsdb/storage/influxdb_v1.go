@@ -4,6 +4,7 @@ import (
 	"fmt"
 	influx "github.com/influxdata/influxdb1-client/v2"
 	log "github.com/sirupsen/logrus"
+	"time"
 )
 
 type  InfluxV1Storage struct {
@@ -11,6 +12,21 @@ type  InfluxV1Storage struct {
 	influxC    influx.Client
 }
 
+func NewInfluxV1Storage(address,username,password,dbName string) (*InfluxV1Storage,error) {
+	var err error
+	ic := &InfluxV1Storage{dbName: dbName}
+	ic.influxC, err = influx.NewHTTPClient(influx.HTTPConfig{
+		Addr:     address, //"http://localhost:8086",
+		Username: username,
+		Password: password,
+		Timeout:30*time.Second,
+	})
+	if err != nil {
+		log.Fatalln("Error: ", err)
+		return nil,err
+	}
+	return ic,nil
+}
 
 func (pr *InfluxV1Storage) InitDefaultBuckets() {
 	// CQ buckets
@@ -21,14 +37,17 @@ func (pr *InfluxV1Storage) InitDefaultBuckets() {
 	// Default bucket for high frequency measurements
 	pr.AddRetentionPolicy("gen_raw","2w")   // 1-2 days from last week
 	// Default bucket for slow measurements
-	pr.AddRetentionPolicy("default_20w","12w") //
+	pr.AddRetentionPolicy("gen_default","12w") //
+
+	pr.DeleteRetentionPolicy("default_20w")
+	pr.DeleteRetentionPolicy("default_8w")
 
 	log.Info("Setting up CQ ")
 
-	pr.DeleteCQ("raw_to_day")
-	pr.DeleteCQ("day_to_week")
-	pr.DeleteCQ("week_to_month")
-	pr.DeleteCQ("month_to_year")
+	//pr.DeleteCQ("raw_to_day")
+	//pr.DeleteCQ("day_to_week")
+	//pr.DeleteCQ("week_to_month")
+	//pr.DeleteCQ("month_to_year")
 
 	pr.AddCQ("raw_to_day","gen_raw","gen_day","1m")
 	pr.AddCQ("day_to_week","gen_day","gen_week","10m")
@@ -36,7 +55,10 @@ func (pr *InfluxV1Storage) InitDefaultBuckets() {
 	pr.AddCQ("month_to_year","gen_month","gen_year","1d")
 }
 
-
+func (pr *InfluxV1Storage) InitSimpleBuckets() {
+	pr.AddRetentionPolicy("gen_raw","240w")
+	pr.AddRetentionPolicy("gen_default","240w")
+}
 
 func (pr *InfluxV1Storage) RunQuery(query string) *influx.Response {
 	q := influx.NewQuery(query, pr.dbName, "s")
@@ -48,9 +70,106 @@ func (pr *InfluxV1Storage) RunQuery(query string) *influx.Response {
 		return response
 	}
 }
+// GetDataPoints - relative must be in format 1m,1h,1d,1w . If groupByTime is empty , aggregate function will be skipped
+func (pr *InfluxV1Storage) GetDataPoints(fieldName,measurement,relativeTime,fromTime,toTime,groupByTime,fillType, dataFunction, groupByTag string ) *influx.Response {
+	// TODO : Add filters
+	var retentionPolicyName,timeQuery,query string
+	var err error
+	var timeInterval time.Duration
+
+	if groupByTime == "auto" {
+		groupByTime = ""
+	}
+
+	if fieldName == "" {
+		fieldName = "value"
+	}
+	if (groupByTag != "" || groupByTime != "") && dataFunction == "" {
+		dataFunction = "mean"
+	}
+	if fillType == "" {
+		fillType = "null"
+	}
+	if !IsHighFrequencyData(measurement) {
+		retentionPolicyName = "gen_default"
+	}
+
+	if fromTime != "" && toTime != "" {
+		if retentionPolicyName == "" {
+			retentionPolicyName,err  = ResolveRetentionName(fromTime,toTime)
+		}
+		if err != nil {
+			log.Error("<ifv1> Can't resolve retention name.Err:",err.Error())
+			return nil
+		}
+		timeQuery = fmt.Sprintf("time >= %s AND time <= %s ",fromTime,toTime)
+		//timeInterval,err = CalculateDuration(fromTime,toTime)
+		//if err != nil {
+		//	log.Error("<ifv1> Can't calculate duration.Err:",err.Error())
+		//	return nil
+		//}
+	}else {
+		timeInterval = GetDurationFromRelativeTime(relativeTime)
+		if retentionPolicyName == "" {
+			retentionPolicyName = ResolveRetentionByDuration(timeInterval)
+		}
+		timeQuery = fmt.Sprintf("time > now()-%s",relativeTime)
+	}
+	fieldName = ResolveFieldFullName(fieldName,retentionPolicyName)
+	//if groupByTime == "auto" {
+	//	//groupByTime = CalculateGroupByTimeByInterval(timeInterval)
+	//}
+
+	if groupByTime == "" && groupByTag !="" {
+		query = fmt.Sprintf("SELECT \"%s\" AS \"value\" FROM \"%s\".\"%s\" WHERE %s GROUP BY %s FILL(%s)",
+			fieldName,retentionPolicyName,measurement,timeQuery, groupByTag,fillType)
+	}else if groupByTime != "" && groupByTag =="" {
+		query = fmt.Sprintf("SELECT %s(\"%s\") AS \"value\" FROM \"%s\".\"%s\" WHERE %s GROUP BY time(%s) FILL(%s)",
+			dataFunction,fieldName,retentionPolicyName,measurement,timeQuery,groupByTime,fillType)
+	}else if groupByTime != "" && groupByTag !="" {
+		query = fmt.Sprintf("SELECT %s(\"%s\") AS \"value\" FROM \"%s\".\"%s\" WHERE %s GROUP BY time(%s), %s FILL(%s)",
+			dataFunction,fieldName,retentionPolicyName,measurement,timeQuery,groupByTime, groupByTag,fillType)
+	}else {
+		if dataFunction != "" {
+			query = fmt.Sprintf("SELECT %s(\"%s\") AS \"value\" FROM \"%s\".\"%s\" WHERE %s FILL(%s)",
+				dataFunction,fieldName,retentionPolicyName,measurement,timeQuery,fillType)
+		}else {
+			query = fmt.Sprintf("SELECT \"%s\" AS \"value\" FROM \"%s\".\"%s\" WHERE %s FILL(%s)",
+				fieldName,retentionPolicyName,measurement,timeQuery,fillType)
+		}
+
+	}
+
+	log.Debug("<ifv1> --- Final query :",query)
+
+	q := influx.NewQuery(query, pr.dbName, "s")
+	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
+		log.Trace(response.Results)
+		return response
+	}else {
+		log.Error(response.Error())
+		return response
+	}
+
+}
+
+func (pr *InfluxV1Storage) WriteDataPoints(bp influx.BatchPoints) error {
+	return pr.influxC.Write(bp)
+}
+
+func (pr *InfluxV1Storage) InitDB(name string) error {
+	log.Info("<ifv1> Setting up database")
+	q := influx.NewQuery(fmt.Sprintf("CREATE DATABASE %s", name), "", "")
+	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
+		log.Infof("<tsdb> Database %s was created with status :%s",name, response.Results)
+		return nil
+	}else {
+		return err
+	}
+}
 
 func (pr *InfluxV1Storage) UpdateRetentionPolicy(name,duration string) {
-	log.Info("Altering retention policy")
+	log.Info("<ifv1> Altering retention policy")
 	var query = fmt.Sprintf("ALTER RETENTION POLICY %s ON %s DURATION %s", name, pr.dbName, duration)
 	q := influx.NewQuery(query, pr.dbName, "s")
 	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
@@ -61,7 +180,7 @@ func (pr *InfluxV1Storage) UpdateRetentionPolicy(name,duration string) {
 }
 
 func (pr *InfluxV1Storage) AddRetentionPolicy(name,duration string) {
-	log.Info("Adding retention policy")
+	log.Info("<ifv1> Adding retention policy")
 	var query = fmt.Sprintf("CREATE RETENTION POLICY %s ON %s DURATION %s REPLICATION 1", name, pr.dbName, duration)
 	q := influx.NewQuery(query, pr.dbName, "s")
 	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
@@ -164,4 +283,8 @@ func (pr *InfluxV1Storage) GetDbRetentionPolicies() []string {
 		log.Error(response.Error())
 	}
 	return nil
+}
+
+func (pr *InfluxV1Storage)Close() {
+	pr.influxC.Close()
 }

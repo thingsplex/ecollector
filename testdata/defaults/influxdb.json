@@ -1,6 +1,6 @@
 [
   {
-    "ID": 2,
+    "ID": 1,
     "Name": "Default event storage",
     "MqttBrokerAddr": "tcp://localhost:1883",
     "MqttClientID": "",
@@ -12,7 +12,33 @@
     "InfluxDB": "historian",
     "BatchMaxSize": 1000,
     "SaveInterval": 5000,
-    "Filters": [],
+    "Filters": [
+      {
+        "ID": 1,
+        "Name": "exclude_vinculum_notify",
+        "MsgType": "evt.pd7.notify",
+        "IsAtomic": true,
+        "Negation": true
+      },{
+        "ID": 2,
+        "Name": "exclude_vinculum_request",
+        "MsgType": "cmd.pd7.request",
+        "IsAtomic": true,
+        "Negation": true
+      },{
+        "ID": 3,
+        "Name": "exclude_vinculum_response",
+        "MsgType": "evt.pd7.response",
+        "IsAtomic": true,
+        "Negation": true
+      },{
+        "ID": 4,
+        "Name": "allow all",
+        "MsgType": "",
+        "IsAtomic": true,
+        "Negation": false
+      }
+    ],
     "Selectors": [
       {
         "ID": 1,
@@ -43,15 +69,6 @@
         "ID": 6,
         "Topic": "pt:j1/mt:cmd/rt:ad/#",
         "InMemory": false
-      }
-    ],
-    "Measurements": [
-      {
-        "ID": "default",
-        "Name": "",
-        "UseServiceAsMeasurementName": true,
-        "RetentionPolicyName": "default_8w",
-        "RetentionPolicyDuration": "8w"
       }
     ],
     "Autostart": true,

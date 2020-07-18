@@ -3,8 +3,8 @@ package api
 import (
 	"github.com/futurehomeno/fimpgo"
 	log "github.com/sirupsen/logrus"
+	"github.com/thingsplex/ecollector/integration/tsdb"
 	"github.com/thingsplex/ecollector/model"
-	"github.com/thingsplex/ecollector/tsdb"
 	"os"
 	"strconv"
 )
@@ -14,6 +14,7 @@ type AdminApi struct {
 	mqt *fimpgo.MqttTransport
 	configs *model.Configs
 }
+
 
 func NewAdminApi(integr *tsdb.Integration,configs *model.Configs) *AdminApi {
 	return &AdminApi{integr: integr,configs:configs}
@@ -33,8 +34,19 @@ func(api *AdminApi) Start() {
 
 }
 
+func(api *AdminApi) getProcID(val map[string]string) tsdb.IDt {
+	procIdStr , ok := val["proc_id"]
+	if !ok {
+		return -1
+	}
+	procId,err  := strconv.Atoi(procIdStr)
+	if err == nil {
+		return tsdb.IDt(procId)
+	}
+	return -1
+}
+
 func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo.FimpMessage,rawMessage []byte){
-	//TODO : Run in it's own goroutine
 	if iotMsg.Service != "ecollector" {
 		return
 	}
@@ -44,7 +56,42 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 	case "cmd.ecprocess.get_list":
 		response := api.integr.Processes()
 		msg = fimpgo.NewMessage("evt.ecprocess.proc_list_report", "ecollector", fimpgo.VTypeObject, response, nil, nil,iotMsg)
-	case "cmd.ecprocess.get":
+
+	case "cmd.ecprocess.update_config":
+		conf := tsdb.ProcessConfig{}
+		err := iotMsg.GetObjectValue(&conf)
+		if err != nil {
+			log.Error("Wrong configuration format")
+			return
+		}
+		err = api.integr.UpdateProcConfig(conf.ID,conf,true)
+		if err != nil {
+			log.Error("Err while updating proc config.Err :",err.Error())
+		}
+
+		errStr := ""
+		status := "ok"
+		if err != nil {
+			status = "error"
+			errStr = err.Error()
+		}
+		response := map[string]string{"op":"update_config","status":status,"error":errStr}
+		msg = fimpgo.NewStrMapMessage("evt.ecprocess.ctrl_report", "ecollector", response, nil, nil,iotMsg)
+
+	case "cmd.ecprocess.add":
+		conf := tsdb.ProcessConfig{}
+		_,err := api.integr.AddProcess(conf)
+		if err != nil {
+			log.Error("Err while adding new proc.Err :",err.Error())
+		}
+		errStr := ""
+		status := "ok"
+		if err != nil {
+			status = "error"
+			errStr = err.Error()
+		}
+		response := map[string]string{"op":"add","status":status,"error":errStr}
+		msg = fimpgo.NewStrMapMessage("evt.ecprocess.ctrl_report", "ecollector", response, nil, nil,iotMsg)
 
 	case "cmd.ecprocess.ctrl":
 		val,err := iotMsg.GetStrMapValue()
@@ -52,23 +99,22 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 			log.Debug(" Wrong value format for cmd.ecprocess.ctrl")
 			return
 		}
-		procIdStr , _ := val["proc_id"]
 		op  , _ := val["operation"]
 		status := "error"
-		if procIdStr != "" && op != "" {
-			procId,err  := strconv.Atoi(procIdStr)
-			if err == nil {
-				proc := api.integr.GetProcessByID(tsdb.IDt(procId))
+		procId := api.getProcID(val)
+		if  procId>0 && op != "" {
+				proc := api.integr.GetProcessByID(procId)
 				switch op {
 				case "start":
 					err = proc.Start()
 				case "stop":
 					err = proc.Stop()
+				case "delete":
+					err = api.integr.RemoveProcess(procId)
 				}
 				if err == nil {
 					status = "ok"
 				}
-			}
 		}
 		errStr := ""
 		if err != nil {
@@ -76,18 +122,6 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 		}
 		response := map[string]string{"op":op,"status":status,"error":errStr}
 		msg = fimpgo.NewStrMapMessage("evt.ecprocess.ctrl_report", "ecollector", response, nil, nil,iotMsg)
-
-	case "cmd.ecprocess.save_selector":
-
-	case "cmd.ecprocess.save_filter":
-
-	case "cmd.ecprocess.save_measurement":
-
-	case "cmd.ecprocess.delete_measurement":
-
-	case "cmd.ecprocess.delete_selector":
-
-	case "cmd.ecprocess.delete_filter":
 
 	case "cmd.ecprocess.reset_to_default":
 		api.configs.LoadDefaults()
@@ -100,47 +134,69 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 			log.Debug(" Wrong value format for cmd.influxdb.query")
 			return
 		}
-		//procId , ok1 := val["proc_id"]
+		procId := api.getProcID(val)
+		if procId < 0 {
+			log.Error(" Wrong process ID")
+			return
+		}
 		query  , _ := val["query"]
-		proc := api.integr.GetProcessByID(1)
-		response := proc.RunQuery(query)
+		proc := api.integr.GetProcessByID(procId)
+		response := proc.Storage().RunQuery(query)
 		msg = fimpgo.NewMessage("evt.tsdb.query_report", "ecollector", fimpgo.VTypeObject, response, nil, nil,iotMsg)
 
+	case "cmd.tsdb.get_data_points":
+		req := GetDataPointsRequest{}
+		err := iotMsg.GetObjectValue(&req)
+		if err != nil {
+			log.Debug(" Wrong request value format for cmd.influxdb.get_data_points")
+			return
+		}
+
+		if req.ProcID <= 0 {
+			log.Error(" Wrong process ID")
+			return
+		}
+		// fieldName,measurement,relativeTime,fromTime,toTime,groupByTime,fillType, dataFunction,groupByField
+
+		proc := api.integr.GetProcessByID(req.ProcID)
+		if proc == nil {
+			log.Error(" Can't fine process with ID = ",req.ProcID)
+			return
+		}
+
+		response := proc.Storage().GetDataPoints(req.FieldName,req.MeasurementName,req.RelativeTime,req.FromTime,req.ToTime,req.GroupByTime,req.FillType,req.DataFunction,req.GroupByTag)
+		msg = fimpgo.NewMessage("evt.tsdb.data_points_report", "ecollector", fimpgo.VTypeObject, response, nil, nil,iotMsg)
+
 	case "cmd.tsdb.get_measurements":
-		//val,err := iotMsg.GetStrMapValue()
-		//if err != nil {
-		//	log.Debug(" Wrong value format for cmd.influxdb.query")
-		//	return
-		//}
-		//procId , ok1 := val["proc_id"]
-		proc := api.integr.GetProcessByID(1)
-		response := proc.GetDbMeasurements()
+		val,err := iotMsg.GetStrMapValue()
+		if err != nil {
+			log.Debug(" Wrong value format for cmd.influxdb.query")
+			return
+		}
+		procId := api.getProcID(val)
+		if procId < 0 {
+			log.Error(" Wrong process ID")
+			return
+		}
+		proc := api.integr.GetProcessByID(procId)
+		response := proc.Storage().GetDbMeasurements()
 
 		msg = fimpgo.NewMessage("evt.tsdb.measurements_report", "ecollector", fimpgo.VTypeStrArray, response, nil, nil,iotMsg)
 
 	case "cmd.tsdb.get_retention_policies":
-		//val,err := iotMsg.GetStrMapValue()
-		//if err != nil {
-		//	log.Debug(" Wrong value format for cmd.influxdb.query")
-		//	return
-		//}
-		//procId , ok1 := val["proc_id"]
-
-
 		val,err := iotMsg.GetStrMapValue()
 		if err != nil {
 			log.Debug(" Wrong value format for cmd.ecprocess.ctrl")
 			return
 		}
-		procIdStr , _ := val["proc_id"]
-		var response []string
-		if procIdStr != ""{
-			procId,err  := strconv.Atoi(procIdStr)
-			if err == nil {
-				proc := api.integr.GetProcessByID(tsdb.IDt(procId))
-				response = proc.GetDbRetentionPolicies()
-				}
+		procId := api.getProcID(val)
+		if procId < 0 {
+			log.Error(" Wrong process ID")
+			return
 		}
+		var response []string
+		proc := api.integr.GetProcessByID(procId)
+		response = proc.Storage().GetDbRetentionPolicies()
 		msg = fimpgo.NewMessage("evt.tsdb.retention_policies", "ecollector", fimpgo.VTypeStrArray, response, nil, nil,iotMsg)
 
 	case "cmd.tsdb.add_retention_policy":
@@ -150,10 +206,15 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 			log.Debug(" Wrong value format for cmd.influxdb.query")
 			return
 		}
+		procId := api.getProcID(val)
+		if procId < 0 {
+			log.Error(" Wrong process ID")
+			return
+		}
 		name  , _ := val["name"]
 		duration  , _ := val["duration"]
-		proc := api.integr.GetProcessByID(1)
-		proc.UpdateRetentionPolicy(name,duration)
+		proc := api.integr.GetProcessByID(procId)
+		proc.Storage().UpdateRetentionPolicy(name,duration)
 
 	case "cmd.tsdb.update_retention_policy":
 		// configure retentions
@@ -164,8 +225,13 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 		}
 		name  , _ := val["name"]
 		duration  , _ := val["duration"]
-		proc := api.integr.GetProcessByID(1)
-		proc.UpdateRetentionPolicy(name,duration)
+		procId := api.getProcID(val)
+		if procId < 0 {
+			log.Error(" Wrong process ID")
+			return
+		}
+		proc := api.integr.GetProcessByID(procId)
+		proc.Storage().UpdateRetentionPolicy(name,duration)
 
 	case "cmd.tsdb.delete_object":
 		// configure retentions
@@ -176,15 +242,19 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 		}
 		name  , _ := val["name"]
 		otype  , _ := val["object_type"]
-
-		proc := api.integr.GetProcessByID(1)
+		procId := api.getProcID(val)
+		if procId < 0 {
+			log.Error(" Wrong process ID")
+			return
+		}
+		proc := api.integr.GetProcessByID(procId)
 		switch otype {
 		case "retention_policy":
 			proc.Stop()
-			proc.DeleteRetentionPolicy(name)
+			proc.Storage().DeleteRetentionPolicy(name)
 			proc.Start()
 		case "measurement":
-			proc.DeleteMeasurement(name)
+			proc.Storage().DeleteMeasurement(name)
 		}
 		response := map[string]string{"status":"ok","error":""}
 		msg = fimpgo.NewStrMapMessage("evt.tsdb.delete_object_report", "ecollector", response, nil, nil,iotMsg)
@@ -203,8 +273,11 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 			log.SetLevel(logLevel)
 			api.configs.LogLevel = level
 			api.configs.SaveToFile()
+			log.Info("Log level updated to = ",logLevel)
+		}else {
+			log.Error("Failed to update log level.Err: ",err.Error())
 		}
-		log.Info("Log level updated to = ",logLevel)
+
 	}
 	if msg == nil {
 		return

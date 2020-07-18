@@ -3,6 +3,7 @@ package tsdb
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/futurehomeno/fimpgo"
 	"github.com/shirou/gopsutil/disk"
 	log "github.com/sirupsen/logrus"
@@ -19,7 +20,6 @@ import (
 // Integration is root level container
 type Integration struct {
 	processes []*Process
-	// in memmory copy of config file
 	processConfigs  []ProcessConfig
 	workDir         string
 	storeFullPath   string
@@ -126,7 +126,7 @@ func (it *Integration) ResetConfigsToDefault() error {
 	}
 	err = it.SaveConfigs()
 	if err != nil {
-		log.Error("Error while saving the config:",err)
+		log.Error("<vmeta> Error while saving the config:",err)
 	}else {
 		it.LoadConfig()
 		it.InitProcesses()
@@ -150,7 +150,7 @@ func (it *Integration) SaveConfigs() error {
 		return ioutil.WriteFile(it.storeFullPath, payload, 0777)
 
 	}
-	log.Info("Save to disk was skipped , storeFullPath is empty")
+	log.Info("<vmeta> Save to disk was skipped , storeFullPath is empty")
 	return nil
 }
 
@@ -158,40 +158,50 @@ func (it *Integration) SaveConfigs() error {
 func (it *Integration) InitProcesses() error {
 
 	if it.processConfigs == nil {
-		return errors.New("Start configurations first.")
-	}
-	for i := range it.processConfigs {
-		if it.processConfigs[i].SiteId == "" {
-			it.processConfigs[i].SiteId = utils.GetFhSiteId("")
-		}
-		log.Info("Site id = ", it.processConfigs[i].SiteId)
-		it.InitNewProcess(&it.processConfigs[i])
+		return errors.New("process not configured")
 	}
 	//Initializing shared metadata store.The store is shared between processes.
 	mqt := fimpgo.NewMqttTransport(it.processConfigs[0].MqttBrokerAddr,it.processConfigs[0].MqttClientID+"-vinc-mstore",it.processConfigs[0].MqttBrokerUsername, it.processConfigs[0].MqttBrokerPassword,true,1,1)
 	mqt.Start()
 	it.serviceMedataStore = metadata.NewVincMetadataStore(mqt)
-	it.serviceMedataStore.Start()
+	err := it.serviceMedataStore.Start()
+	if err != nil {
+		log.Error("<boot> The process failed to connect to Meta Store . ")
+	}else {
+		log.Info("<boot> Meta store sucessfully initialized")
+	}
+
+	for i := range it.processConfigs {
+		if it.processConfigs[i].SiteId == "" {
+			it.processConfigs[i].SiteId = utils.GetFhSiteId("")
+		}
+		log.Info("<vmeta> Site id = ", it.processConfigs[i].SiteId)
+		it.InitNewProcess(&it.processConfigs[i])
+	}
+
 	return nil
 }
 
 // InitNewProcess initialize and start single process
 func (it *Integration) InitNewProcess(procConfig *ProcessConfig) error {
+	if procConfig.Profile == "" {
+		procConfig.Profile = "optimized"
+	}
 	proc := NewProcess(procConfig)
 	proc.SetServiceMedataStore(it.serviceMedataStore)
 	it.processes = append(it.processes, proc)
 	if procConfig.Autostart {
 		err := proc.Init()
 		if err == nil {
-			log.Infof("Process ID=%d was initialized.", procConfig.ID)
+			log.Infof("<boot> Process ID=%d was initialized.", procConfig.ID)
 			err := proc.Start()
-			log.Infof("Process ID=%d is started.", procConfig.ID)
+			log.Infof("<boot> Process ID=%d is started.", procConfig.ID)
 			if err != nil {
-				log.Errorf("Process ID=%d failed to start . Error : %s", procConfig, err)
+				log.Errorf("<boot> Process ID=%d failed to start . Error : %s", procConfig, err)
 			}
 
 		} else {
-			log.Errorf("Initialization of Process ID=%d FAILED . Error : %s", procConfig.ID, err)
+			log.Errorf("<boot> Initialization of Process ID=%d FAILED . Error : %s", procConfig.ID, err)
 			return err
 		}
 	}
@@ -204,7 +214,15 @@ func (it *Integration) AddProcess(procConfig ProcessConfig) (IDt, error) {
 	if err != nil {
 		return 0, err
 	}
-	procConfig.ID = GetNewID(it.processConfigs)
+	newID := GetNewID(it.processConfigs)
+	if procConfig.ID == 0 {
+		procConfig = defaultProc[0]
+		procConfig.Autostart = false
+		if procConfig.MqttClientID == "" {
+			procConfig.MqttClientID = fmt.Sprintf("ecollector_%d",newID)
+		}
+	}
+	procConfig.ID = newID
 	if len(procConfig.Filters) == 0 {
 		procConfig.Filters = defaultProc[0].Filters
 	}
@@ -252,7 +270,7 @@ func (it *Integration) StartDiskMonitor() {
 			<-it.diskMonitorTicker.C
 			info,err:= disk.Usage("/")
 			if err != nil {
-				log.Error("Disk monitor failed to obtain disk usage .Error :",err.Error())
+				log.Error("<vmeta> Disk monitor failed to obtain disk usage .Error :",err.Error())
 				continue
 			}
 			if info.UsedPercent > it.DiskMonitorShutdownLimit {
@@ -270,7 +288,7 @@ func (it *Integration) StartDiskMonitor() {
 
 // Boot initializes integration
 func Boot(mainConfig *model.Configs) *Integration {
-	log.Info("<tsdb>Booting InfluxDB integration ")
+	log.Info("<tsdb> Booting InfluxDB integration ")
 	if mainConfig.WorkDirectory == "" {
 		log.Info("<tsdb> Config path path is not defined  ")
 		return nil

@@ -2,31 +2,36 @@ package tsdb
 
 import (
 	"errors"
-	"fmt"
+	"github.com/futurehomeno/fimpgo"
+	influx "github.com/influxdata/influxdb1-client/v2"
+	log "github.com/sirupsen/logrus"
+	"github.com/thingsplex/ecollector/integration/tsdb/storage"
 	"github.com/thingsplex/ecollector/metadata"
 	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
-	"github.com/futurehomeno/fimpgo"
-	influx "github.com/influxdata/influxdb1-client/v2"
-	log "github.com/sirupsen/logrus"
 )
 
 // Process implements integration flow between messaging system and influxdb timeseries database.
 // It inserts events into db
 type Process struct {
-	mqttTransport *fimpgo.MqttTransport
-	influxC     influx.Client
-	Config      *ProcessConfig
-	batchPoints map[string]influx.BatchPoints
-	ticker      *time.Ticker
-	writeMutex  *sync.Mutex
-	apiMutex    *sync.Mutex
-	transform   Transform
-	State       string
-	LastError   string
+	ID                 IDt
+	mqttTransport      *fimpgo.MqttTransport
+	Config             *ProcessConfig
+	storage            *storage.InfluxV1Storage
+	batchPoints        map[string]influx.BatchPoints
+	ticker             *time.Ticker
+	writeMutex         *sync.Mutex
+	apiMutex           *sync.Mutex
+	transform          Transform
+	State              string
+	LastError          string
 	serviceMedataStore metadata.MetadataStore // metadata store is used for event enrichment
+}
+
+func (pr *Process) Storage() *storage.InfluxV1Storage {
+	return pr.storage
 }
 
 // NewProcess is a constructor
@@ -35,6 +40,7 @@ func NewProcess(config *ProcessConfig) *Process {
 	proc.writeMutex = &sync.Mutex{}
 	proc.apiMutex = &sync.Mutex{}
 	proc.State = "LOADED"
+	proc.ID = config.ID
 	return &proc
 }
 
@@ -42,69 +48,42 @@ func (pr *Process) SetServiceMedataStore(serviceMedataStore metadata.MetadataSto
 	pr.serviceMedataStore = serviceMedataStore
 }
 
-// Init doing the process bootrstrap .
+// Init - initializes the process - creates MQTT connection , initializes storage , initializes batch points
 func (pr *Process) Init() error {
 	var err error
 	pr.State = "INIT_FAILED"
 	log.Info("<tsdb>Initializing influx client.")
-	pr.influxC, err = influx.NewHTTPClient(influx.HTTPConfig{
-		Addr:     pr.Config.InfluxAddr, //"http://localhost:8086",
-		Username: pr.Config.InfluxUsername,
-		Password: pr.Config.InfluxPassword,
-		Timeout:30*time.Second,
-	})
+
+	pr.storage,err = storage.NewInfluxV1Storage(pr.Config.InfluxAddr,pr.Config.InfluxUsername,pr.Config.InfluxPassword,pr.Config.InfluxDB)
+
 	if err != nil {
-		log.Fatalln("Error: ", err)
 		return err
 	}
 
 	if pr.Config.InitDb {
 		// Creating database
 		log.Info("<tsdb> Setting up database")
-		q := influx.NewQuery(fmt.Sprintf("CREATE DATABASE %s", pr.Config.InfluxDB), "", "")
-		if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
-			log.Infof("<tsdb> Database %s was created with status :%s", pr.Config.InfluxDB, response.Results)
-		} else {
+		if err = pr.storage.InitDB(pr.Config.InfluxDB); err != nil {
 			pr.LastError = "InfluxDB is not reachable .Check connection parameters."
 			pr.State = "INITIALIZED_WITH_ERRORS"
 		}
 		// Setting up retention policies
 		log.Info("Setting up retention policies")
-
-		// CQ buckets
-		pr.AddRetentionPolicy("gen_year","240w")  // 1-5 years from last 5 years
-		pr.AddRetentionPolicy("gen_month","48w") // 1-12 month from last year
-		pr.AddRetentionPolicy("gen_week","12w") // 1-4 weeks from last 3 month
-		pr.AddRetentionPolicy("gen_day","2w")   // 1-3 days from last month
-		// Default bucket for high frequency measurements
-		pr.AddRetentionPolicy("gen_raw","2w")   // 1-2 days from last week
-		// Default bucket for slow measurements
-		pr.AddRetentionPolicy("default_20w","12w") //
-
-		log.Info("Setting up CQ ")
-
-		pr.DeleteCQ("raw_to_day")
-		pr.DeleteCQ("day_to_week")
-		pr.DeleteCQ("week_to_month")
-		pr.DeleteCQ("month_to_year")
-
-		pr.AddCQ("raw_to_day","gen_raw","gen_day","1m")
-		pr.AddCQ("day_to_week","gen_day","gen_week","10m")
-		pr.AddCQ("week_to_month","gen_week","gen_month","1h")
-		pr.AddCQ("month_to_year","gen_month","gen_year","1d")
-
-
+		if pr.Config.Profile == "optimized" {
+			pr.storage.InitDefaultBuckets()
+		}else {
+			pr.storage.InitSimpleBuckets()
+		}
 	}else {
 		log.Info("<tsdb> Database initialization is skipped.(turned off in config)")
 
 	}
-
 	pr.batchPoints = make(map[string]influx.BatchPoints)
 	err = pr.InitBatchPoint("gen_raw")
 	if err != nil {
 		log.Error("<tsdb> Can't init batch points . Error: ", err)
 	}
-	err = pr.InitBatchPoint("default_20w")
+	err = pr.InitBatchPoint("gen_default")
 	if err != nil {
 		log.Error("<tsdb> Can't init batch points . Error: ", err)
 	}
@@ -112,6 +91,7 @@ func (pr *Process) Init() error {
 	log.Info("<tsdb> DB initialization completed.")
 	log.Info("<tsdb> Initializing MQTT adapter.")
 	//"tcp://localhost:1883", "blackflowint", "", ""
+
 	pr.mqttTransport = fimpgo.NewMqttTransport(pr.Config.MqttBrokerAddr,pr.Config.MqttClientID,pr.Config.MqttBrokerUsername, pr.Config.MqttBrokerPassword,true,1,1)
 	pr.mqttTransport.SetMessageHandler(pr.OnMessage)
 	log.Info("<tsdb> MQTT adapter initialization completed.")
@@ -134,8 +114,8 @@ func (pr *Process) OnMessage(topic string, addr *fimpgo.Address , iotMsg *fimpgo
 
 		}
 	}()
-	// log.Debugf("New msg of class = %s", iotMsg.Class
-	context := &MsgContext{time:time.Now()}
+	context := &MsgContext{time: time.Now()}
+	context.measurementName = iotMsg.Service+"."+iotMsg.Type
 
 	if pr.Config.SiteId!="" {
 		addr.GlobalPrefix = pr.Config.SiteId
@@ -170,7 +150,7 @@ func (pr *Process) OnMessage(topic string, addr *fimpgo.Address , iotMsg *fimpgo
 // The code is executed in callers goroutine
 func (pr *Process) AddMessage(topic string, addr *fimpgo.Address , iotMsg *fimpgo.FimpMessage, modTime time.Time) {
 	// log.Debugf("New msg of class = %s", iotMsg.Class
-	context := &MsgContext{time:modTime}
+	context := &MsgContext{time: modTime}
 	if pr.filter(context, topic, iotMsg, addr.GlobalPrefix, 0) {
 		points, err := pr.transform(context, topic,addr, iotMsg, addr.GlobalPrefix)
 
@@ -247,7 +227,7 @@ func (pr *Process) filter(context *MsgContext, topic string, iotMsg *fimpgo.Fimp
 // write - writes data points into batch point
 func (pr *Process) write(context *MsgContext, point *DataPoint) {
 	// log.Debugf("Point: %+v", point)
-	rpName := pr.getRetentionPolicyName(point.MeasurementName)
+	rpName := storage.ResolveWriteRetentionPolicyName(point.MeasurementName)
 	log.Debugf("<tsdb> Writing measurement: %s into %s", point.Point.Name(),rpName)
 	if context.measurementName != "" {
 		pr.writeMutex.Lock()
@@ -286,16 +266,6 @@ func (pr *Process) Configure(procConfig ProcessConfig, doRestart bool) error {
 	return nil
 }
 
-func (pr *Process) getRetentionPolicyName(mName string ) string {
-	if mName == "electricity_meter_power" ||
-		mName == "electricity_meter_energy" ||
-		mName == "electricity_meter_ext" ||
-		strings.Contains(mName,"sensor_") {
-		return "gen_raw"
-	}
-	return "default_20w"
-}
-
 // InitBatchPoint initializes new batch point or resets existing one .
 func (pr *Process) InitBatchPoint(bpName string) error {
 	var err error
@@ -326,7 +296,7 @@ func (pr *Process) WriteIntoDb() error {
 		var err error
 
 		for i:=0; i<5 ; i++  {
-			err = pr.influxC.Write(pr.batchPoints[bpKey])
+			err = pr.storage.WriteDataPoints(pr.batchPoints[bpKey])
 			if err == nil {
 				break
 			}else if strings.Contains(err.Error(),"field type conflict") {
@@ -383,6 +353,12 @@ func (pr *Process) Start() error {
 			return err
 		}
 	}
+	if pr.Config.SaveInterval < 1000 {
+		pr.Config.SaveInterval = 1000
+	}
+	if pr.Config.BatchMaxSize == 0 {
+		pr.Config.BatchMaxSize = 1000
+	}
 	pr.ticker = time.NewTicker(time.Millisecond * pr.Config.SaveInterval)
 	go func() {
 		for _ = range pr.ticker.C {
@@ -421,13 +397,11 @@ func (pr *Process) Stop() error {
 	}
 	log.Info("<tsdb> Stopping process...")
 	pr.ticker.Stop()
-
 	for _, selector := range pr.Config.Selectors {
 		pr.mqttTransport.Unsubscribe(selector.Topic)
 	}
-	pr.influxC.Close()
+	pr.storage.Close()
 	pr.mqttTransport.Stop()
-	pr.serviceMedataStore.Stop()
 	pr.State = "STOPPED"
 	log.Info("<tsdb> Process stopped")
 	return nil

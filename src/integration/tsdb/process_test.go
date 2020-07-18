@@ -14,43 +14,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var measurements []Measurement
 
 func Setup() {
 	log.SetFormatter(&log.TextFormatter{FullTimestamp: true})
 	log.SetLevel(log.DebugLevel)
-	measurements = []Measurement{
-		Measurement{
-			ID:                      "sensor_temp",
-			RetentionPolicyDuration: "8w",
-			RetentionPolicyName:     "bf_sensor_temp",
-		},
-		Measurement{
-			ID:                      "sensor_lumin",
-			RetentionPolicyDuration: "8w",
-			RetentionPolicyName:     "bf_sensor_lumin",
-		},
-		Measurement{
-			ID:                      "sensor_presence",
-			RetentionPolicyDuration: "8w",
-			RetentionPolicyName:     "bf_sensor_presence",
-		},
-		Measurement{
-			ID:                      "sensor_contact",
-			RetentionPolicyDuration: "8w",
-			RetentionPolicyName:     "sensor_contact",
-		},
-		Measurement{
-			ID:                      "meter_elec",
-			RetentionPolicyDuration: "8w",
-			RetentionPolicyName:     "bf_meter_elec",
-		},
-		Measurement{
-			ID:                      "default",
-			RetentionPolicyDuration: "8w",
-			RetentionPolicyName:     "bf_default",
-		},
-	}
 
 }
 
@@ -136,7 +103,6 @@ func TestProcess(t *testing.T) {
 		SaveInterval:       1000,
 		Filters:            filters,
 		Selectors:          selector,
-		Measurements:       measurements,
 	}
 
 	influxC, err := influx.NewHTTPClient(influx.HTTPConfig{
