@@ -71,7 +71,7 @@ func (pr *InfluxV1Storage) RunQuery(query string) *influx.Response {
 	}
 }
 // GetDataPoints - relative must be in format 1m,1h,1d,1w . If groupByTime is empty , aggregate function will be skipped
-func (pr *InfluxV1Storage) GetDataPoints(fieldName,measurement,relativeTime,fromTime,toTime,groupByTime,fillType, dataFunction, groupByTag string ) *influx.Response {
+func (pr *InfluxV1Storage) GetDataPoints(fieldName,measurement,relativeTime,fromTime,toTime,groupByTime,fillType, dataFunction,transformFunction, groupByTag string ) *influx.Response {
 	// TODO : Add filters
 	var retentionPolicyName,timeQuery,query string
 	var err error
@@ -109,9 +109,14 @@ func (pr *InfluxV1Storage) GetDataPoints(fieldName,measurement,relativeTime,from
 		//	return nil
 		//}
 	}else {
-		timeInterval = GetDurationFromRelativeTime(relativeTime)
+		timeInterval = ResolveDurationFromRelativeTime(relativeTime)
+		userSetTimeGroupDuration := ResolveDurationFromRelativeTime(groupByTime)
 		if retentionPolicyName == "" {
-			retentionPolicyName = ResolveRetentionByDuration(timeInterval)
+			retentionPolicyName = ResolveRetentionByElapsedTimeDuration(timeInterval)
+			aggregationDuration := GetRetentionTimeGroupDuration(retentionPolicyName)
+			if (userSetTimeGroupDuration >= aggregationDuration) && dataFunction == "mean" {
+				retentionPolicyName = ResolveRetentionByTimeGroup(groupByTime)
+			}
 		}
 		timeQuery = fmt.Sprintf("time > now()-%s",relativeTime)
 	}
@@ -119,27 +124,36 @@ func (pr *InfluxV1Storage) GetDataPoints(fieldName,measurement,relativeTime,from
 	//if groupByTime == "auto" {
 	//	//groupByTime = CalculateGroupByTimeByInterval(timeInterval)
 	//}
-
+	selector := ""
 	if groupByTime == "" && groupByTag !="" {
-		query = fmt.Sprintf("SELECT \"%s\" AS \"value\" FROM \"%s\".\"%s\" WHERE %s GROUP BY %s FILL(%s)",
-			fieldName,retentionPolicyName,measurement,timeQuery, groupByTag,fillType)
+		query = fmt.Sprintf("AS \"value\" FROM \"%s\".\"%s\" WHERE %s GROUP BY %s FILL(%s)",
+			retentionPolicyName,measurement,timeQuery, groupByTag,fillType)
+		selector = fmt.Sprintf("\"%s\"",fieldName)
 	}else if groupByTime != "" && groupByTag =="" {
-		query = fmt.Sprintf("SELECT %s(\"%s\") AS \"value\" FROM \"%s\".\"%s\" WHERE %s GROUP BY time(%s) FILL(%s)",
-			dataFunction,fieldName,retentionPolicyName,measurement,timeQuery,groupByTime,fillType)
+		query = fmt.Sprintf(" AS \"value\" FROM \"%s\".\"%s\" WHERE %s GROUP BY time(%s) FILL(%s)",
+			retentionPolicyName,measurement,timeQuery,groupByTime,fillType)
+		selector = fmt.Sprintf("%s(\"%s\")",dataFunction,fieldName)
 	}else if groupByTime != "" && groupByTag !="" {
-		query = fmt.Sprintf("SELECT %s(\"%s\") AS \"value\" FROM \"%s\".\"%s\" WHERE %s GROUP BY time(%s), %s FILL(%s)",
-			dataFunction,fieldName,retentionPolicyName,measurement,timeQuery,groupByTime, groupByTag,fillType)
+		query = fmt.Sprintf(" AS \"value\" FROM \"%s\".\"%s\" WHERE %s GROUP BY time(%s), %s FILL(%s)",
+			retentionPolicyName,measurement,timeQuery,groupByTime, groupByTag,fillType)
+		selector = fmt.Sprintf("%s(\"%s\")",dataFunction,fieldName)
 	}else {
 		if dataFunction != "" {
-			query = fmt.Sprintf("SELECT %s(\"%s\") AS \"value\" FROM \"%s\".\"%s\" WHERE %s FILL(%s)",
-				dataFunction,fieldName,retentionPolicyName,measurement,timeQuery,fillType)
+			query = fmt.Sprintf(" AS \"value\" FROM \"%s\".\"%s\" WHERE %s FILL(%s)",
+				retentionPolicyName,measurement,timeQuery,fillType)
+			selector = fmt.Sprintf("%s(\"%s\")",dataFunction,fieldName)
 		}else {
-			query = fmt.Sprintf("SELECT \"%s\" AS \"value\" FROM \"%s\".\"%s\" WHERE %s FILL(%s)",
-				fieldName,retentionPolicyName,measurement,timeQuery,fillType)
+			query = fmt.Sprintf(" AS \"value\" FROM \"%s\".\"%s\" WHERE %s FILL(%s)",
+				retentionPolicyName,measurement,timeQuery,fillType)
+			selector = fmt.Sprintf("\"%s\"",fieldName)
 		}
 
 	}
+	if transformFunction != "" {
+		selector = fmt.Sprintf("%s(%s)",transformFunction,selector)
+	}
 
+	query = fmt.Sprintf("SELECT %s %s",selector,query)
 	log.Debug("<ifv1> --- Final query :",query)
 
 	q := influx.NewQuery(query, pr.dbName, "s")

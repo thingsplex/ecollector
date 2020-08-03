@@ -23,10 +23,10 @@ func ResolveRetentionName(fromTime,toTime string) (string,error) {
 		return "", errFrom
 	}
 	timeSinceNow:= time.Now().Sub(from)
-	return ResolveRetentionByDuration(timeSinceNow),nil
+	return ResolveRetentionByElapsedTimeDuration(timeSinceNow),nil
 }
 // Converts duration into retention policy .
-func ResolveRetentionByDuration(timeSinceNow time.Duration) string {
+func ResolveRetentionByElapsedTimeDuration(timeSinceNow time.Duration) string {
 	switch  {
 	case timeSinceNow > 12*MonthDuration:
 		return "gen_year"
@@ -56,8 +56,48 @@ func ResolveFieldFullName(name,retentionPolicyName string) string  {
 	}
 }
 
+func GetRetentionTimeGroupDuration(name string ) time.Duration {
+	switch name {
+	case "gen_day":
+		return 1*time.Minute
+	case "gen_week":
+		return 10*time.Minute
+	case "gen_month":
+		return 1 * time.Hour
+	case "gen_year":
+		return 1 * DayDuration
+
+	}
+	return 0
+}
+
+// 0    10min
+// 1m
+// if  retention duration > target
+// return
+
+func ResolveRetentionByTimeGroup(timeGroup string) string {
+	//pr.AddCQ("raw_to_day","gen_raw","gen_day","1m")
+	//pr.AddCQ("day_to_week","gen_day","gen_week","10m")
+	//pr.AddCQ("week_to_month","gen_week","gen_month","1h")
+	//pr.AddCQ("month_to_year","gen_month","gen_year","1d")
+	d := ResolveDurationFromRelativeTime(timeGroup)
+	switch  {
+	case d >= 1*DayDuration:
+		return "gen_year"
+	case d >= 1*time.Hour:
+		return "gen_month"
+	case d >= 10 * time.Minute:
+		return "gen_week"
+	case d >= 1*time.Minute :
+		return "gen_day"
+	default:
+		return "gen_raw"
+	}
+}
+
 // Relative time must be in format Xh,Xd,Xw
-func GetDurationFromRelativeTime(rTime string) time.Duration {
+func ResolveDurationFromRelativeTime(rTime string) time.Duration {
 	var d int
 	if strings.Contains(rTime, "h") {
 		d,_ = strconv.Atoi(strings.ReplaceAll(rTime,"h",""))
@@ -67,7 +107,7 @@ func GetDurationFromRelativeTime(rTime string) time.Duration {
 		return time.Duration(d)*DayDuration
 	}else if strings.Contains(rTime, "m") {
 		d,_ = strconv.Atoi(strings.ReplaceAll(rTime,"m",""))
-		return time.Duration(d)*MonthDuration
+		return time.Duration(d)*time.Minute
 	}else if strings.Contains(rTime, "w") {
 		d,_ = strconv.Atoi(strings.ReplaceAll(rTime,"w",""))
 		return time.Duration(d)*WeekDuration
