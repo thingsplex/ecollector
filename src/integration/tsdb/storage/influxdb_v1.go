@@ -102,7 +102,7 @@ func (pr *InfluxV1Storage) GetDataPoints(fieldName,measurement,relativeTime,from
 			log.Error("<ifv1> Can't resolve retention name.Err:",err.Error())
 			return nil
 		}
-		timeQuery = fmt.Sprintf("time >= %s AND time <= %s ",fromTime,toTime)
+		timeQuery = fmt.Sprintf("time >= '%s' AND time <= '%s' ",fromTime,toTime)
 		//timeInterval,err = CalculateDuration(fromTime,toTime)
 		//if err != nil {
 		//	log.Error("<ifv1> Can't calculate duration.Err:",err.Error())

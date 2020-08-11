@@ -174,8 +174,12 @@ func (pr *Process) AddMessage(topic string, addr *fimpgo.Address , iotMsg *fimpg
 // Filter - transforms IotMsg into DB compatible struct
 func (pr *Process) filter(context *MsgContext, topic string, iotMsg *fimpgo.FimpMessage, domain string, filterID IDt) bool {
 	var result bool
-	// no filters defines , everything is allowed
 
+	if iotMsg.Service == "ecollector" {
+		// ignoring all messages from and to self .
+		return false
+	}
+	// no filters defines , everything is allowed
 	for i := range pr.Config.Filters {
 		if (pr.Config.Filters[i].IsAtomic && filterID == 0) || (pr.Config.Filters[i].ID == filterID) {
 			result = true
