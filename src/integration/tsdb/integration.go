@@ -19,15 +19,15 @@ import (
 
 // Integration is root level container
 type Integration struct {
-	processes []*Process
-	processConfigs  []ProcessConfig
-	workDir         string
-	storeFullPath   string
-	Name            string
-	diskMonitorTicker *time.Ticker
-	configSaveMutex *sync.Mutex
-	serviceMedataStore metadata.MetadataStore // metadata store is used for event enrichment
-	DisableDiskMonitor    bool
+	processes                []*Process
+	processConfigs           []ProcessConfig // TODO: Remove.There is no need to store configuration file in memory.
+	workDir                  string
+	storeFullPath            string
+	Name                     string
+	diskMonitorTicker        *time.Ticker
+	configSaveMutex          *sync.Mutex
+	serviceMedataStore       metadata.MetadataStore // metadata store is used for event enrichment
+	DisableDiskMonitor       bool
 	DiskMonitorShutdownLimit float64 // used disk space limit in % , if disk used space goes above the limit , ecollector stops all processes
 }
 
@@ -46,30 +46,33 @@ func (it *Integration) GetProcessByID(ID IDt) *Process {
 }
 
 // GetDefaultIntegrConfig returns default config .
-func (it *Integration) GetDefaultIntegrConfig() ([]ProcessConfig,error) {
-	defaultConfigFile := filepath.Join(it.workDir,"defaults",it.Name+".json")
+func (it *Integration) GetDefaultIntegrConfig() ([]ProcessConfig, error) {
+	defaultConfigFile := filepath.Join(it.workDir, "defaults", it.Name+".json")
 	configFileBody, err := ioutil.ReadFile(defaultConfigFile)
 	var conf []ProcessConfig
 	if err != nil {
-		return nil,err
+		return nil, err
 	}
 	err = json.Unmarshal(configFileBody, &conf)
 	if err != nil {
-		return nil,err
+		return nil, err
 	}
-	return conf,nil
+	for i := range conf {
+		conf[i].MqttClientID = fmt.Sprintf("eclr_%d", utils.GenerateRandomNumber())
+	}
+	return conf, nil
 
 }
 
-// Init initilizes integration app
+// Init initializes integration app
 func (it *Integration) Init() {
-	it.storeFullPath = filepath.Join(it.workDir,"data","proc",it.Name+".json")
-	if !utils.FileExists(it.storeFullPath) {
-		err := utils.CopyFile(filepath.Join(it.workDir,"defaults",it.Name+".json"),it.storeFullPath)
-		if err != nil {
-			log.Error("Failed to load integration default template , Err:",err.Error())
-		}
-	}
+	it.storeFullPath = filepath.Join(it.workDir, "data", "proc", it.Name+".json")
+	//if !utils.FileExists(it.storeFullPath) {
+	//	err := utils.CopyFile(filepath.Join(it.workDir, "defaults", it.Name+".json"), it.storeFullPath)
+	//	if err != nil {
+	//		log.Error("Failed to load integration default template , Err:", err.Error())
+	//	}
+	//}
 }
 
 // SetConfig config setter
@@ -80,9 +83,17 @@ func (it *Integration) SetConfig(processConfigs []ProcessConfig) {
 // UpdateProcConfig update process configurations
 func (it *Integration) UpdateProcConfig(ID IDt, procConfig ProcessConfig, doRestart bool) error {
 	proc := it.GetProcessByID(ID)
+	// Updating process instance
 	err := proc.Configure(procConfig, doRestart)
 	if err != nil {
 		return err
+	}
+	// Updating configuration files
+	for ic := range it.processConfigs {
+		if it.processConfigs[ic].ID == ID {
+			it.processConfigs[ic] = procConfig
+			break
+		}
 	}
 	err = it.SaveConfigs()
 	return err
@@ -95,7 +106,10 @@ func (it *Integration) LoadConfig() error {
 		it.configSaveMutex = &sync.Mutex{}
 	}
 	if _, err := os.Stat(it.storeFullPath); os.IsNotExist(err) {
-		it.processConfigs,err = it.GetDefaultIntegrConfig()
+		it.processConfigs, err = it.GetDefaultIntegrConfig()
+		if err != nil {
+			log.Error("Can't load default configurations.Err: ",err.Error())
+		}
 		log.Info("Integration configuration is loaded from default.")
 		return it.SaveConfigs()
 	}
@@ -120,14 +134,14 @@ func (it *Integration) ResetConfigsToDefault() error {
 	}
 	var err error
 	it.processes = it.processes[:0]
-	it.processConfigs,err = it.GetDefaultIntegrConfig()
+	it.processConfigs, err = it.GetDefaultIntegrConfig()
 	if err != nil {
 		return err
 	}
 	err = it.SaveConfigs()
 	if err != nil {
-		log.Error("<vmeta> Error while saving the config:",err)
-	}else {
+		log.Error("<vmeta> Error while saving the config:", err)
+	} else {
 		it.LoadConfig()
 		it.InitProcesses()
 	}
@@ -161,13 +175,13 @@ func (it *Integration) InitProcesses() error {
 		return errors.New("process not configured")
 	}
 	//Initializing shared metadata store.The store is shared between processes.
-	mqt := fimpgo.NewMqttTransport(it.processConfigs[0].MqttBrokerAddr,it.processConfigs[0].MqttClientID+"-vinc-mstore",it.processConfigs[0].MqttBrokerUsername, it.processConfigs[0].MqttBrokerPassword,true,1,1)
+	mqt := fimpgo.NewMqttTransport(it.processConfigs[0].MqttBrokerAddr, it.processConfigs[0].MqttClientID+"-vinc-mstore", it.processConfigs[0].MqttBrokerUsername, it.processConfigs[0].MqttBrokerPassword, true, 1, 1)
 	mqt.Start()
 	it.serviceMedataStore = metadata.NewVincMetadataStore(mqt)
 	err := it.serviceMedataStore.Start()
 	if err != nil {
 		log.Error("<boot> The process failed to connect to Meta Store . ")
-	}else {
+	} else {
 		log.Info("<boot> Meta store sucessfully initialized")
 	}
 
@@ -209,30 +223,25 @@ func (it *Integration) InitNewProcess(procConfig *ProcessConfig) error {
 }
 
 // AddProcess adds new process .
-func (it *Integration) AddProcess(procConfig ProcessConfig) (IDt, error) {
-	defaultProc,err := it.GetDefaultIntegrConfig()
-	if err != nil {
-		return 0, err
-	}
-	newID := GetNewID(it.processConfigs)
-	if procConfig.ID == 0 {
-		procConfig = defaultProc[0]
-		procConfig.Autostart = false
-		if procConfig.MqttClientID == "" {
-			procConfig.MqttClientID = fmt.Sprintf("ecollector_%d",newID)
+func (it *Integration) AddProcess(procConfig *ProcessConfig) (IDt, error) {
+	if procConfig == nil {
+		defaultProc, err := it.GetDefaultIntegrConfig()
+		if err != nil {
+			if err != nil {
+				log.Error("Can't load default configurations.Err: ",err.Error())
+			}
+			return 0, err
 		}
+		procConfig = &ProcessConfig{}
+		*procConfig = defaultProc[0]
+		newID := GetNewID(it.processConfigs)
+		log.Info("<tsdb> Adding new process.pID = ",newID)
+		procConfig.ID = newID
+		procConfig.Autostart = false
 	}
-	procConfig.ID = newID
-	if len(procConfig.Filters) == 0 {
-		procConfig.Filters = defaultProc[0].Filters
-	}
-	if len(procConfig.Selectors) == 0 {
-		procConfig.Selectors = defaultProc[0].Selectors
-	}
-
-	it.processConfigs = append(it.processConfigs, procConfig)
+	it.processConfigs = append(it.processConfigs, *procConfig)
 	it.SaveConfigs()
-	return procConfig.ID, it.InitNewProcess(&procConfig)
+	return procConfig.ID, it.InitNewProcess(procConfig)
 }
 
 // RemoveProcess stops process , removes it from config file and removes instance .
@@ -253,10 +262,8 @@ func (it *Integration) RemoveProcess(ID IDt) error {
 			break
 		}
 	}
-	if err == nil {
-		it.SaveConfigs()
 
-	}
+	it.SaveConfigs()
 	return err
 }
 
@@ -268,13 +275,13 @@ func (it *Integration) StartDiskMonitor() {
 	go func() {
 		for {
 			<-it.diskMonitorTicker.C
-			info,err:= disk.Usage("/")
+			info, err := disk.Usage("/")
 			if err != nil {
-				log.Error("<vmeta> Disk monitor failed to obtain disk usage .Error :",err.Error())
+				log.Error("<vmeta> Disk monitor failed to obtain disk usage .Error :", err.Error())
 				continue
 			}
 			if info.UsedPercent > it.DiskMonitorShutdownLimit {
-				log.Errorf("!!!!! DISK LOW SPACE !!!! Stopping all processes . Disk usage = %f",info.UsedPercent)
+				log.Errorf("!!!!! DISK LOW SPACE !!!! Stopping all processes . Disk usage = %f", info.UsedPercent)
 				for i := range it.processes {
 					it.processes[i].Stop()
 				}
@@ -299,7 +306,7 @@ func Boot(mainConfig *model.Configs) *Integration {
 	if mainConfig.DiskMonitorShutdownLimit == 0 {
 		mainConfig.DiskMonitorShutdownLimit = 85
 	}
-	integr := Integration{Name: "influxdb", workDir: mainConfig.WorkDirectory,DiskMonitorShutdownLimit: mainConfig.DiskMonitorShutdownLimit,DisableDiskMonitor: mainConfig.DisableDiskMonitor}
+	integr := Integration{Name: "influxdb", workDir: mainConfig.WorkDirectory, DiskMonitorShutdownLimit: mainConfig.DiskMonitorShutdownLimit, DisableDiskMonitor: mainConfig.DisableDiskMonitor}
 	log.Info("<tsdb> Initializing integration  ")
 	integr.Init()
 	log.Info("<tsdb> Loading configs  ")

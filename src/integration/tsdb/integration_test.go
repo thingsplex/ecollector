@@ -26,6 +26,8 @@ import (
 
 // }
 
+var testConfigs = map[string]string{}
+
 func SetupIntegrationTest() {
 	viper.SetDefault("mqtt_broker_addr", "localhost:1883")
 	viper.SetDefault("mqtt_username", "")

@@ -145,8 +145,7 @@ func (pr *Process) OnMessage(topic string, addr *fimpgo.Address , iotMsg *fimpgo
 	}
 }
 
-// AddMessage is invoked by an adapter on every new message
-// Is used by batch loader
+// AddMessage Is used by batch loader
 // The code is executed in callers goroutine
 func (pr *Process) AddMessage(topic string, addr *fimpgo.Address , iotMsg *fimpgo.FimpMessage, modTime time.Time) {
 	// log.Debugf("New msg of class = %s", iotMsg.Class
@@ -232,7 +231,7 @@ func (pr *Process) filter(context *MsgContext, topic string, iotMsg *fimpgo.Fimp
 func (pr *Process) write(context *MsgContext, point *DataPoint) {
 	// log.Debugf("Point: %+v", point)
 	rpName := storage.ResolveWriteRetentionPolicyName(point.MeasurementName)
-	log.Debugf("<tsdb> Writing measurement: %s into %s", point.Point.Name(),rpName)
+	log.Debugf("<tsdb> pID = %d. Writing measurement: %s into %s",pr.ID, point.Point.Name(),rpName)
 	if context.measurementName != "" {
 		pr.writeMutex.Lock()
 		pr.batchPoints[rpName].AddPoint(point.Point)
@@ -260,8 +259,7 @@ func (pr *Process) write(context *MsgContext, point *DataPoint) {
 // Configure should be used to replace new set of filters and selectors with new set .
 // Process should be restarted after Configure call
 func (pr *Process) Configure(procConfig ProcessConfig, doRestart bool) error {
-	// pr.Config.Selectors = selectors
-	// pr.Config.Filters = filters
+	log.Info("Configuring process. pID = ",procConfig.ID)
 	*pr.Config = procConfig
 	if doRestart {
 		pr.Stop()
@@ -296,7 +294,7 @@ func (pr *Process) WriteIntoDb() error {
 		if len(pr.batchPoints[bpKey].Points()) == 0 {
 			continue
 		}
-		log.Debugf("<tsdb> Writing batch of size = %d , using retention policy = %s into db = %s", len(pr.batchPoints[bpKey].Points()), pr.batchPoints[bpKey].RetentionPolicy(), pr.batchPoints[bpKey].Database())
+		log.Debugf("<tsdb> Writing batch of size = %d , using retention policy = %s into db = %s , proc = %d", len(pr.batchPoints[bpKey].Points()), pr.batchPoints[bpKey].RetentionPolicy(), pr.batchPoints[bpKey].Database(),pr.ID)
 		var err error
 
 		for i:=0; i<5 ; i++  {

@@ -58,6 +58,7 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 		msg = fimpgo.NewMessage("evt.ecprocess.proc_list_report", "ecollector", fimpgo.VTypeObject, response, nil, nil,iotMsg)
 
 	case "cmd.ecprocess.update_config":
+		//TODO : Process in goroutine
 		conf := tsdb.ProcessConfig{}
 		err := iotMsg.GetObjectValue(&conf)
 		if err != nil {
@@ -79,8 +80,10 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 		msg = fimpgo.NewStrMapMessage("evt.ecprocess.ctrl_report", "ecollector", response, nil, nil,iotMsg)
 
 	case "cmd.ecprocess.add":
-		conf := tsdb.ProcessConfig{}
-		_,err := api.integr.AddProcess(conf)
+		//TODO : Process in goroutine
+
+		//TODO : Improve error handling. This can fail if DB IP or host is wrong .
+		_,err := api.integr.AddProcess(nil)
 		if err != nil {
 			log.Error("Err while adding new proc.Err :",err.Error())
 		}
@@ -94,6 +97,7 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 		msg = fimpgo.NewStrMapMessage("evt.ecprocess.ctrl_report", "ecollector", response, nil, nil,iotMsg)
 
 	case "cmd.ecprocess.ctrl":
+		//TODO : Process in goroutine
 		val,err := iotMsg.GetStrMapValue()
 		if err != nil {
 			log.Debug(" Wrong value format for cmd.ecprocess.ctrl")
@@ -164,7 +168,7 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 			return
 		}
 
-		response := proc.Storage().GetDataPoints(req.FieldName,req.MeasurementName,req.RelativeTime,req.FromTime,req.ToTime,req.GroupByTime,req.FillType,req.DataFunction,req.TransformFunction,req.GroupByTag)
+		response := proc.Storage().GetDataPoints(req.FieldName,req.MeasurementName,req.RelativeTime,req.FromTime,req.ToTime,req.GroupByTime,req.FillType,req.DataFunction,req.TransformFunction,req.GroupByTag,req.Filters)
 		msg = fimpgo.NewMessage("evt.tsdb.data_points_report", "ecollector", fimpgo.VTypeObject, response, nil, nil,iotMsg)
 
 	case "cmd.tsdb.get_measurements":
@@ -253,6 +257,12 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 			proc.Stop()
 			proc.Storage().DeleteRetentionPolicy(name)
 			proc.Start()
+		case "database":
+			proc.Stop()
+			proc.Storage().DropDB(name)
+			proc.Start()
+		case "cq":
+			proc.Storage().DeleteCQ(name)
 		case "measurement":
 			proc.Storage().DeleteMeasurement(name)
 		}

@@ -49,26 +49,6 @@
         "ID": 2,
         "Topic": "pt:j1/mt:cmd/rt:dev/#",
         "InMemory": false
-      },
-      {
-        "ID": 3,
-        "Topic": "pt:j1/mt:evt/rt:app/#",
-        "InMemory": false
-      },
-      {
-        "ID": 4,
-        "Topic": "pt:j1/mt:cmd/rt:app/#",
-        "InMemory": false
-      },
-      {
-        "ID": 5,
-        "Topic": "pt:j1/mt:evt/rt:ad/#",
-        "InMemory": false
-      },
-      {
-        "ID": 6,
-        "Topic": "pt:j1/mt:cmd/rt:ad/#",
-        "InMemory": false
       }
     ],
     "Autostart": true,

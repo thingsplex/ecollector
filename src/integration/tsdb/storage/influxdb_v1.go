@@ -12,6 +12,11 @@ type  InfluxV1Storage struct {
 	influxC    influx.Client
 }
 
+type DataPointsFilter struct {
+	Tags              map[string]string      `json:"tags"`
+}
+
+
 func NewInfluxV1Storage(address,username,password,dbName string) (*InfluxV1Storage,error) {
 	var err error
 	ic := &InfluxV1Storage{dbName: dbName}
@@ -71,9 +76,8 @@ func (pr *InfluxV1Storage) RunQuery(query string) *influx.Response {
 	}
 }
 // GetDataPoints - relative must be in format 1m,1h,1d,1w . If groupByTime is empty , aggregate function will be skipped
-func (pr *InfluxV1Storage) GetDataPoints(fieldName,measurement,relativeTime,fromTime,toTime,groupByTime,fillType, dataFunction,transformFunction, groupByTag string ) *influx.Response {
-	// TODO : Add filters
-	var retentionPolicyName,timeQuery,query string
+func (pr *InfluxV1Storage) GetDataPoints(fieldName,measurement,relativeTime,fromTime,toTime,groupByTime,fillType, dataFunction,transformFunction, groupByTag string,filter DataPointsFilter ) *influx.Response {
+	var retentionPolicyName,timeQuery,query,filterStr string
 	var err error
 	var timeInterval time.Duration
 
@@ -124,27 +128,32 @@ func (pr *InfluxV1Storage) GetDataPoints(fieldName,measurement,relativeTime,from
 	//if groupByTime == "auto" {
 	//	//groupByTime = CalculateGroupByTimeByInterval(timeInterval)
 	//}
+
+	for k,v := range filter.Tags {
+		filterStr = fmt.Sprintf("%s AND %s = '%s'",filterStr,k,v)
+	}
+
 	selector := ""
 	if groupByTime == "" && groupByTag !="" {
-		query = fmt.Sprintf("AS \"value\" FROM \"%s\".\"%s\" WHERE %s GROUP BY %s FILL(%s)",
-			retentionPolicyName,measurement,timeQuery, groupByTag,fillType)
+		query = fmt.Sprintf("AS \"value\" FROM \"%s\".\"%s\" WHERE %s %s GROUP BY %s FILL(%s)",
+			retentionPolicyName,measurement,timeQuery,filterStr, groupByTag,fillType)
 		selector = fmt.Sprintf("\"%s\"",fieldName)
 	}else if groupByTime != "" && groupByTag =="" {
-		query = fmt.Sprintf(" AS \"value\" FROM \"%s\".\"%s\" WHERE %s GROUP BY time(%s) FILL(%s)",
-			retentionPolicyName,measurement,timeQuery,groupByTime,fillType)
+		query = fmt.Sprintf(" AS \"value\" FROM \"%s\".\"%s\" WHERE %s %s GROUP BY time(%s) FILL(%s)",
+			retentionPolicyName,measurement,timeQuery,filterStr,groupByTime,fillType)
 		selector = fmt.Sprintf("%s(\"%s\")",dataFunction,fieldName)
 	}else if groupByTime != "" && groupByTag !="" {
-		query = fmt.Sprintf(" AS \"value\" FROM \"%s\".\"%s\" WHERE %s GROUP BY time(%s), %s FILL(%s)",
-			retentionPolicyName,measurement,timeQuery,groupByTime, groupByTag,fillType)
+		query = fmt.Sprintf(" AS \"value\" FROM \"%s\".\"%s\" WHERE %s %s GROUP BY time(%s), %s FILL(%s)",
+			retentionPolicyName,measurement,timeQuery,filterStr,groupByTime, groupByTag,fillType)
 		selector = fmt.Sprintf("%s(\"%s\")",dataFunction,fieldName)
 	}else {
 		if dataFunction != "" {
-			query = fmt.Sprintf(" AS \"value\" FROM \"%s\".\"%s\" WHERE %s FILL(%s)",
-				retentionPolicyName,measurement,timeQuery,fillType)
+			query = fmt.Sprintf(" AS \"value\" FROM \"%s\".\"%s\" WHERE %s %s FILL(%s)",
+				retentionPolicyName,measurement,timeQuery,filterStr,fillType)
 			selector = fmt.Sprintf("%s(\"%s\")",dataFunction,fieldName)
 		}else {
-			query = fmt.Sprintf(" AS \"value\" FROM \"%s\".\"%s\" WHERE %s FILL(%s)",
-				retentionPolicyName,measurement,timeQuery,fillType)
+			query = fmt.Sprintf(" AS \"value\" FROM \"%s\".\"%s\" WHERE %s %s FILL(%s)",
+				retentionPolicyName,measurement,timeQuery,filterStr,fillType)
 			selector = fmt.Sprintf("\"%s\"",fieldName)
 		}
 
@@ -181,6 +190,18 @@ func (pr *InfluxV1Storage) InitDB(name string) error {
 		return err
 	}
 }
+
+func (pr *InfluxV1Storage) DropDB(name string) error {
+	log.Infof("<ifv1> Dropping database %s",name)
+	q := influx.NewQuery(fmt.Sprintf("DROP DATABASE %s", name), "", "")
+	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
+		log.Infof("<tsdb> Database %s was dropped with status :%s",name, response.Results)
+		return nil
+	}else {
+		return err
+	}
+}
+
 
 func (pr *InfluxV1Storage) UpdateRetentionPolicy(name,duration string) {
 	log.Info("<ifv1> Altering retention policy")
