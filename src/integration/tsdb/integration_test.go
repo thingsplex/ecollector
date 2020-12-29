@@ -99,7 +99,7 @@ func TestIntegration(t *testing.T) {
 		Selectors:          selector,
 	}
 
-	integr := Integration{Name: "influxdb", StoreLocation: ""}
+	integr := Integration{Name: "influxdb"}
 	integr.SetConfig([]ProcessConfig{config1})
 	if err := integr.InitProcesses(); err != nil {
 		t.Error("Process Init failed .")
@@ -111,7 +111,7 @@ func TestIntegration(t *testing.T) {
 
 	// Adding new process
 
-	if _, err := integr.AddProcess(config2); err != nil {
+	if _, err := integr.AddProcess(&config2); err != nil {
 		t.Error("Failed to add new process")
 	}
 

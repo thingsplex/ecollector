@@ -145,7 +145,10 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 		}
 		query  , _ := val["query"]
 		proc := api.integr.GetProcessByID(procId)
-		response := proc.Storage().RunQuery(query)
+		response,err := proc.Storage().RunQuery(query)
+		if err != nil {
+			log.Error("<api> Error while querying data . Err:",err.Error())
+		}
 		msg = fimpgo.NewMessage("evt.tsdb.query_report", "ecollector", fimpgo.VTypeObject, response, nil, nil,iotMsg)
 
 	case "cmd.tsdb.get_data_points":
@@ -183,8 +186,10 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 			return
 		}
 		proc := api.integr.GetProcessByID(procId)
-		response := proc.Storage().GetDbMeasurements()
-
+		response,err := proc.Storage().GetDbMeasurements()
+		if err != nil {
+			log.Error("<api> Error while getting measurements . Err:",err.Error())
+		}
 		msg = fimpgo.NewMessage("evt.tsdb.measurements_report", "ecollector", fimpgo.VTypeStrArray, response, nil, nil,iotMsg)
 
 	case "cmd.tsdb.get_retention_policies":
@@ -200,7 +205,10 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 		}
 		var response []string
 		proc := api.integr.GetProcessByID(procId)
-		response = proc.Storage().GetDbRetentionPolicies()
+		response,err = proc.Storage().GetDbRetentionPolicies()
+		if err != nil {
+			log.Error("<api> Error while getting measurements . Err:",err.Error())
+		}
 		msg = fimpgo.NewMessage("evt.tsdb.retention_policies", "ecollector", fimpgo.VTypeStrArray, response, nil, nil,iotMsg)
 
 	case "cmd.tsdb.add_retention_policy":

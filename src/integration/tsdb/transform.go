@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/futurehomeno/fimpgo"
 	influx "github.com/influxdata/influxdb1-client/v2"
+	"github.com/thingsplex/ecollector/integration/tsdb/processing"
 	"strconv"
 )
 
@@ -19,6 +20,14 @@ const (
 func DefaultTransform(context *MsgContext, topic string, addr *fimpgo.Address, iotMsg *fimpgo.FimpMessage, domain string) ([]*DataPoint, error) {
 	var points []*DataPoint
 	tags := getDefaultTags(context, topic, domain)
+	var seriesID string
+	devId, ok := tags["dev_id"]
+	if ok {
+		seriesID = devId
+	} else {
+		seriesID = topic
+	}
+
 	var vInt int64
 	var err error
 	fields := map[string]interface{}{}
@@ -35,7 +44,7 @@ func DefaultTransform(context *MsgContext, topic string, addr *fimpgo.Address, i
 					mName = MeasurementElecMeterPower
 				} else if unit == "kWh" {
 					mName = MeasurementElecMeterEnergy
-				}else {
+				} else {
 					return nil, fmt.Errorf("unknown unit")
 				}
 				fields["value"] = val
@@ -43,12 +52,12 @@ func DefaultTransform(context *MsgContext, topic string, addr *fimpgo.Address, i
 				tags["dir"] = DirectionImport
 				context.measurementName = mName
 				valueType = "_skip_"
+				seriesID = fmt.Sprintf("%s;import",seriesID)
 			} else {
 				return nil, err
 			}
 
 		} else if iotMsg.Type == "evt.meter_ext.report" {
-			mName = "electricity_meter_ext"
 			val, err := iotMsg.GetFloatMapValue()
 			// https://github.com/futurehomeno/fimp-api#extended-report-object
 			if err != nil {
@@ -63,8 +72,11 @@ func DefaultTransform(context *MsgContext, topic string, addr *fimpgo.Address, i
 				point, err := influx.NewPoint(MeasurementElecMeterEnergy, pTags, pFields, context.time)
 				if err == nil {
 					points = append(points, &DataPoint{
-						MeasurementName: MeasurementElecMeterEnergy,
-						Point:           point,
+						MeasurementName:  MeasurementElecMeterEnergy,
+						AggregationValue: fields["e_import"],
+						AggregationFunc:  processing.AggregationFuncLast,
+						SeriesID:         fmt.Sprintf("%s;%s;import", MeasurementElecMeterEnergy, seriesID),
+						Point:            point,
 					})
 				}
 			}
@@ -76,8 +88,11 @@ func DefaultTransform(context *MsgContext, topic string, addr *fimpgo.Address, i
 				point, err := influx.NewPoint(MeasurementElecMeterEnergy, pTags, pFields, context.time)
 				if err == nil {
 					points = append(points, &DataPoint{
-						MeasurementName: MeasurementElecMeterEnergy,
-						Point:           point,
+						MeasurementName:  MeasurementElecMeterEnergy,
+						AggregationValue: fields["e_export"],
+						AggregationFunc:  processing.AggregationFuncLast,
+						SeriesID:         fmt.Sprintf("%s;%s;export", MeasurementElecMeterEnergy, seriesID),
+						Point:            point,
 					})
 				}
 			}
@@ -87,12 +102,13 @@ func DefaultTransform(context *MsgContext, topic string, addr *fimpgo.Address, i
 
 			pImport, pImportOk := val["p_import"]
 			if pImportOk {
-				fields["p_import"] = pImport
-				fields["p_import_react"], _ = val["p_import_react"]
-				fields["p_import_apparent"], _ = val["p_import_apparent"]
-				fields["p_import_avg"], _ = val["p_import_avg"]
-				fields["p_import_min"], _ = val["p_import_min"]
-				fields["p_import_max"], _ = val["p_import_max"]
+				//fields["p_import"] = pImport
+				//fields["p_import_react"], _ = val["p_import_react"]
+				//fields["p_import_apparent"], _ = val["p_import_apparent"]
+				//fields["p_import_avg"], _ = val["p_import_avg"]
+				//fields["p_import_min"], _ = val["p_import_min"]
+				//fields["p_import_max"], _ = val["p_import_max"]
+
 				// Creating separate measurement
 				pTags := getDefaultTags(context, topic, domain)
 				pTags["dir"] = DirectionImport
@@ -101,17 +117,22 @@ func DefaultTransform(context *MsgContext, topic string, addr *fimpgo.Address, i
 				point, err := influx.NewPoint(MeasurementElecMeterPower, pTags, pFields, context.time)
 				if err == nil {
 					points = append(points, &DataPoint{
-						MeasurementName: MeasurementElecMeterPower,
-						Point:           point,
+						MeasurementName:  MeasurementElecMeterPower,
+						AggregationValue: pImport,
+						AggregationFunc:  processing.AggregationFuncMean,
+						SeriesID:         fmt.Sprintf("%s;%s;import", MeasurementElecMeterPower, seriesID),
+						Point:            point,
 					})
 				}
 			}
+
 			pExport, pExportOk := val["p_export"]
 			if pExportOk {
-				fields["p_export"] = pExport
-				fields["p_export_react"], _ = val["p_export_react"]
-				fields["p_export_min"], _ = val["p_export_min"]
-				fields["p_export_max"], _ = val["p_export_max"]
+				//fields["p_export"] = pExport
+				//fields["p_export_react"], _ = val["p_export_react"]
+				//fields["p_export_min"], _ = val["p_export_min"]
+				//fields["p_export_max"], _ = val["p_export_max"]
+
 				// Creating separate measurement
 				pTags := getDefaultTags(context, topic, domain)
 				pTags["dir"] = DirectionExport
@@ -119,47 +140,50 @@ func DefaultTransform(context *MsgContext, topic string, addr *fimpgo.Address, i
 				point, err := influx.NewPoint(MeasurementElecMeterPower, pTags, pFields, context.time)
 				if err == nil {
 					points = append(points, &DataPoint{
-						MeasurementName: MeasurementElecMeterPower,
-						Point:           point,
+						MeasurementName:  MeasurementElecMeterPower,
+						AggregationValue: pExport,
+						AggregationFunc:  processing.AggregationFuncMean,
+						SeriesID:         fmt.Sprintf("%s;%s;export", MeasurementElecMeterPower, seriesID),
+						Point:            point,
 					})
 				}
 			}
-			freq, freqOk := val["freq"]
-			if freqOk {
-				fields["freq"] = freq
-				fields["freq_min"], _ = val["freq_min"]
-				fields["freq_max"], _ = val["freq_max"]
-			}
-
-			fields["u1"], _ = val["u1"]
-			fields["u2"], _ = val["u2"]
-			fields["u3"], _ = val["u3"]
-			fields["i1"], _ = val["i1"]
-			fields["i2"], _ = val["i2"]
-			fields["i3"], _ = val["i3"]
-
-			dcp, dcpOk := val["dc_p"]
-			if dcpOk {
-				fields["dc_p"] = dcp
-				fields["dc_p_min"], _ = val["dc_p_min"]
-				fields["dc_p_max"], _ = val["dc_p_max"]
-			}
-
-			dcu, dcuOk := val["dc_u"]
-			if dcuOk {
-				fields["dc_u"] = dcu
-				fields["dc_u_min"], _ = val["dc_u_min"]
-				fields["dc_u_max"], _ = val["dc_u_max"]
-			}
-
-			dci, dciOk := val["dc_i"]
-			if dciOk {
-				fields["dc_i"] = dci
-				fields["dc_i_min"], _ = val["dc_i_min"]
-				fields["dc_i_max"], _ = val["dc_i_max"]
-			}
-
-			context.measurementName = mName
+			//freq, freqOk := val["freq"]
+			//if freqOk {
+			//	fields["freq"] = freq
+			//	fields["freq_min"], _ = val["freq_min"]
+			//	fields["freq_max"], _ = val["freq_max"]
+			//}
+			//
+			//fields["u1"], _ = val["u1"]
+			//fields["u2"], _ = val["u2"]
+			//fields["u3"], _ = val["u3"]
+			//fields["i1"], _ = val["i1"]
+			//fields["i2"], _ = val["i2"]
+			//fields["i3"], _ = val["i3"]
+			//
+			//dcp, dcpOk := val["dc_p"]
+			//if dcpOk {
+			//	fields["dc_p"] = dcp
+			//	fields["dc_p_min"], _ = val["dc_p_min"]
+			//	fields["dc_p_max"], _ = val["dc_p_max"]
+			//}
+			//
+			//dcu, dcuOk := val["dc_u"]
+			//if dcuOk {
+			//	fields["dc_u"] = dcu
+			//	fields["dc_u_min"], _ = val["dc_u_min"]
+			//	fields["dc_u_max"], _ = val["dc_u_max"]
+			//}
+			//
+			//dci, dciOk := val["dc_i"]
+			//if dciOk {
+			//	fields["dc_i"] = dci
+			//	fields["dc_i_min"], _ = val["dc_i_min"]
+			//	fields["dc_i_max"], _ = val["dc_i_max"]
+			//}
+			fields = nil
+			//context.measurementName = "electricity_meter_ext"
 			valueType = "_skip_"
 		}
 
@@ -233,8 +257,11 @@ func DefaultTransform(context *MsgContext, topic string, addr *fimpgo.Address, i
 		point, err := influx.NewPoint(context.measurementName, tags, fields, context.time)
 		if err == nil {
 			return append(points, &DataPoint{
-				MeasurementName: context.measurementName,
-				Point:           point,
+				MeasurementName:  context.measurementName,
+				AggregationValue: fields["value"],
+				AggregationFunc:  processing.AggregationFuncMean,
+				SeriesID:         fmt.Sprintf("%s;%s", context.measurementName, seriesID),
+				Point:            point,
 			}), err
 		}
 	}

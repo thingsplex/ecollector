@@ -1,5 +1,5 @@
 Package: ecollector
-Version: 0.4.5
+Version: 0.5.0
 Replaces: ecollector
 Section: non-free/misc
 Priority: optional

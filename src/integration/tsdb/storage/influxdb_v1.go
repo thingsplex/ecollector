@@ -33,9 +33,12 @@ func NewInfluxV1Storage(address,username,password,dbName string) (*InfluxV1Stora
 	return ic,nil
 }
 
-func (pr *InfluxV1Storage) InitDefaultBuckets() {
+func (pr *InfluxV1Storage) InitDefaultBuckets() error {
 	// CQ buckets
-	pr.AddRetentionPolicy("gen_year","240w")  // 1-5 years from last 5 years
+	err := pr.AddRetentionPolicy("gen_year","240w")  // 1-5 years from last 5 years
+	if err != nil {
+		return err
+	}
 	pr.AddRetentionPolicy("gen_month","48w") // 1-12 month from last year
 	pr.AddRetentionPolicy("gen_week","12w") // 1-4 weeks from last 3 month
 	pr.AddRetentionPolicy("gen_day","2w")   // 1-3 days from last month
@@ -44,7 +47,10 @@ func (pr *InfluxV1Storage) InitDefaultBuckets() {
 	// Default bucket for slow measurements
 	pr.AddRetentionPolicy("gen_default","12w") //
 
-	pr.DeleteRetentionPolicy("default_20w")
+	err = pr.DeleteRetentionPolicy("default_20w")
+	if err != nil {
+		return err
+	}
 	pr.DeleteRetentionPolicy("default_8w")
 
 	log.Info("Setting up CQ ")
@@ -54,10 +60,14 @@ func (pr *InfluxV1Storage) InitDefaultBuckets() {
 	//pr.DeleteCQ("week_to_month")
 	//pr.DeleteCQ("month_to_year")
 
-	pr.AddCQ("raw_to_day","gen_raw","gen_day","1m")
+	err = pr.AddCQ("raw_to_day","gen_raw","gen_day","1m")
+	if err != nil {
+		return err
+	}
 	pr.AddCQ("day_to_week","gen_day","gen_week","10m")
 	pr.AddCQ("week_to_month","gen_week","gen_month","1h")
 	pr.AddCQ("month_to_year","gen_month","gen_year","1d")
+	return nil
 }
 
 func (pr *InfluxV1Storage) InitSimpleBuckets() {
@@ -65,14 +75,13 @@ func (pr *InfluxV1Storage) InitSimpleBuckets() {
 	pr.AddRetentionPolicy("gen_default","240w")
 }
 
-func (pr *InfluxV1Storage) RunQuery(query string) *influx.Response {
+func (pr *InfluxV1Storage) RunQuery(query string) (*influx.Response,error) {
 	q := influx.NewQuery(query, pr.dbName, "s")
-	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
+	if response, err := pr.influxC.Query(q); err == nil {
 		log.Trace(response.Results)
-		return response
+		return response,response.Error()
 	}else {
-		log.Error(response.Error())
-		return response
+		return nil,err
 	}
 }
 // GetDataPoints - relative must be in format 1m,1h,1d,1w . If groupByTime is empty , aggregate function will be skipped
@@ -166,12 +175,12 @@ func (pr *InfluxV1Storage) GetDataPoints(fieldName,measurement,relativeTime,from
 	log.Debug("<ifv1> --- Final query :",query)
 
 	q := influx.NewQuery(query, pr.dbName, "s")
-	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
+	if response, err := pr.influxC.Query(q); err == nil {
 		log.Trace(response.Results)
 		return response
 	}else {
-		log.Error(response.Error())
-		return response
+		log.Error("<ifv1> Get datapoint Error: ",err.Error())
+		return nil
 	}
 
 }
@@ -183,9 +192,9 @@ func (pr *InfluxV1Storage) WriteDataPoints(bp influx.BatchPoints) error {
 func (pr *InfluxV1Storage) InitDB(name string) error {
 	log.Info("<ifv1> Setting up database")
 	q := influx.NewQuery(fmt.Sprintf("CREATE DATABASE %s", name), "", "")
-	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
-		log.Infof("<tsdb> Database %s was created with status :%s",name, response.Results)
-		return nil
+	if response, err := pr.influxC.Query(q); err == nil  {
+		log.Infof("<tsdb> Database %s was created with status :%v",name, response.Results)
+		return response.Error()
 	}else {
 		return err
 	}
@@ -194,92 +203,100 @@ func (pr *InfluxV1Storage) InitDB(name string) error {
 func (pr *InfluxV1Storage) DropDB(name string) error {
 	log.Infof("<ifv1> Dropping database %s",name)
 	q := influx.NewQuery(fmt.Sprintf("DROP DATABASE %s", name), "", "")
-	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
-		log.Infof("<tsdb> Database %s was dropped with status :%s",name, response.Results)
-		return nil
+	if response, err := pr.influxC.Query(q); err == nil {
+		log.Infof("<tsdb> Database %s was dropped with status :%v",name, response.Results)
+		return response.Error()
 	}else {
 		return err
 	}
 }
 
 
-func (pr *InfluxV1Storage) UpdateRetentionPolicy(name,duration string) {
+func (pr *InfluxV1Storage) UpdateRetentionPolicy(name,duration string) error {
 	log.Info("<ifv1> Altering retention policy")
 	var query = fmt.Sprintf("ALTER RETENTION POLICY %s ON %s DURATION %s", name, pr.dbName, duration)
 	q := influx.NewQuery(query, pr.dbName, "s")
-	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
+	if response, err := pr.influxC.Query(q); err == nil {
 		log.Debug(response.Results)
+		return  response.Error()
 	}else {
-		log.Error(response.Error())
+		return err
 	}
 }
 
-func (pr *InfluxV1Storage) AddRetentionPolicy(name,duration string) {
+func (pr *InfluxV1Storage) AddRetentionPolicy(name,duration string) error {
 	log.Info("<ifv1> Adding retention policy")
 	var query = fmt.Sprintf("CREATE RETENTION POLICY %s ON %s DURATION %s REPLICATION 1", name, pr.dbName, duration)
 	q := influx.NewQuery(query, pr.dbName, "s")
-	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
+	if response, err := pr.influxC.Query(q); err == nil {
 		log.Debug(response.Results)
+		return  response.Error()
 	}else {
-		log.Error(response.Error())
+		return err
 	}
 
 }
 
-func (pr *InfluxV1Storage) DeleteRetentionPolicy(name string) {
+func (pr *InfluxV1Storage) DeleteRetentionPolicy(name string) error {
 	log.Infof("Deleting retention policy %s",name)
 	var query = fmt.Sprintf("DROP RETENTION POLICY %s ON %s", name, pr.dbName)
 	q := influx.NewQuery(query, pr.dbName, "s")
-	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
+	if response, err := pr.influxC.Query(q); err == nil  {
 		log.Debug(response.Results)
+		return response.Error()
 	}else {
-		log.Error(response.Error())
+		log.Error("<ifv1> DeleteRetentionPolicy Error:",err.Error())
+		return err
 	}
 
 }
 
-func (pr *InfluxV1Storage) AddCQ(name,srcRetentionPolicy,targetRetentionPolicy,time string) {
+func (pr *InfluxV1Storage) AddCQ(name,srcRetentionPolicy,targetRetentionPolicy,time string) error {
 	log.Info("Adding retention policy")
 	var query = fmt.Sprintf("CREATE CONTINUOUS QUERY \"%s\" ON \"%s\"\n" +
 		"BEGIN\n " +
 		"SELECT mean(*) INTO \"%s\".\"%s\".:MEASUREMENT FROM \"%s\".\"%s\"./.*/ GROUP BY time(%s),* \n" +
 		"END", name, pr.dbName,pr.dbName,targetRetentionPolicy,pr.dbName,srcRetentionPolicy,time)
-	log.Debugf("CQ query",query)
+	log.Debugf("CQ query : %s",query)
 	q := influx.NewQuery(query, pr.dbName, "s")
-	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
+	if response, err := pr.influxC.Query(q); err == nil {
 		log.Debug(response.Results)
+		return response.Error()
 	}else {
-		log.Error(response.Error())
+		return err
+
 	}
 }
 
-func (pr *InfluxV1Storage) DeleteCQ(name string) {
+func (pr *InfluxV1Storage) DeleteCQ(name string)error {
 	log.Infof("Deleting CQ  %s",name)
 	var query = fmt.Sprintf("DROP CONTINUOUS QUERY %s ON %s", name, pr.dbName)
 	q := influx.NewQuery(query, pr.dbName, "s")
-	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
+	if response, err := pr.influxC.Query(q); err == nil  {
 		log.Debug(response.Results)
+		return response.Error()
 	}else {
-		log.Error(response.Error())
+		return err
 	}
 }
 
-func (pr *InfluxV1Storage) DeleteMeasurement(name string) {
+func (pr *InfluxV1Storage) DeleteMeasurement(name string)error {
 	log.Infof("Deleting measurement %s",name)
 	var query = fmt.Sprintf("DROP MEASUREMENT \"%s\" ", name)
 	q := influx.NewQuery(query, pr.dbName, "s")
-	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
+	if response, err := pr.influxC.Query(q); err == nil  {
 		log.Debug(response.Results)
+		return response.Error()
 	}else {
-		log.Error(response.Error())
+		return err
 	}
 
 }
 
 // Return list of measurements from db
-func (pr *InfluxV1Storage) GetDbMeasurements() []string {
+func (pr *InfluxV1Storage) GetDbMeasurements() ([]string,error) {
 	q := influx.NewQuery("SHOW MEASUREMENTS", pr.dbName, "ms")
-	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
+	if response, err := pr.influxC.Query(q); err == nil  {
 		//log.Debug(response.Results)
 		if len(response.Results) > 0 {
 			if len(response.Results[0].Series)>0 {
@@ -287,21 +304,19 @@ func (pr *InfluxV1Storage) GetDbMeasurements() []string {
 				for i := range response.Results[0].Series[0].Values {
 					result = append(result,response.Results[0].Series[0].Values[i][0].(string))
 				}
-				return result
+				return result,response.Error()
 			}
 		}
-		return nil
+		return nil,response.Error()
 	}else {
-		log.Error(err)
-		log.Error(response.Error())
+		return nil,err
 	}
-	return nil
 }
 
 // Return list of measurements from db
-func (pr *InfluxV1Storage) GetDbRetentionPolicies() []string {
+func (pr *InfluxV1Storage) GetDbRetentionPolicies() ([]string,error) {
 	q := influx.NewQuery("SHOW RETENTION POLICIES", pr.dbName, "ms")
-	if response, err := pr.influxC.Query(q); err == nil && response.Error() == nil {
+	if response, err := pr.influxC.Query(q); err == nil {
 		//log.Debug(response.Results)
 		if len(response.Results) > 0 {
 			if len(response.Results[0].Series)>0 {
@@ -309,15 +324,13 @@ func (pr *InfluxV1Storage) GetDbRetentionPolicies() []string {
 				for i := range response.Results[0].Series[0].Values {
 					result = append(result,response.Results[0].Series[0].Values[i][0].(string))
 				}
-				return result
+				return result,response.Error()
 			}
 		}
-		return nil
+		return nil,response.Error()
 	}else {
-		log.Error(err)
-		log.Error(response.Error())
+		return nil, err
 	}
-	return nil
 }
 
 func (pr *InfluxV1Storage)Close() {

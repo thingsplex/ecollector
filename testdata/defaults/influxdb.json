@@ -3,7 +3,7 @@
     "ID": 1,
     "Name": "Default event storage",
     "MqttBrokerAddr": "tcp://localhost:1883",
-    "MqttClientID": "",
+    "MqttClientID": "ecollector_1",
     "MqttBrokerUsername": "",
     "MqttBrokerPassword": "",
     "InfluxAddr": "http://localhost:8086",

@@ -5,6 +5,7 @@ import (
 	"github.com/futurehomeno/fimpgo"
 	influx "github.com/influxdata/influxdb1-client/v2"
 	log "github.com/sirupsen/logrus"
+	"github.com/thingsplex/ecollector/integration/tsdb/processing"
 	"github.com/thingsplex/ecollector/integration/tsdb/storage"
 	"github.com/thingsplex/ecollector/metadata"
 	"runtime/debug"
@@ -27,6 +28,7 @@ type Process struct {
 	transform          Transform
 	State              string
 	LastError          string
+	rawAggregator      *processing.DataPointAggregator
 	serviceMedataStore metadata.MetadataStore // metadata store is used for event enrichment
 }
 
@@ -41,6 +43,7 @@ func NewProcess(config *ProcessConfig) *Process {
 	proc.apiMutex = &sync.Mutex{}
 	proc.State = "LOADED"
 	proc.ID = config.ID
+	proc.rawAggregator = processing.NewDataPointAggregator(30*time.Second)
 	return &proc
 }
 
@@ -98,7 +101,7 @@ func (pr *Process) Init() error {
 	if pr.State == "INIT_FAILED" {
 		pr.State = "INITIALIZED"
 	}
-
+	pr.StartAggregatorWorker()
 	log.Info("<tsdb> the process init state =",pr.State )
 	return nil
 }
@@ -133,7 +136,23 @@ func (pr *Process) OnMessage(topic string, addr *fimpgo.Address , iotMsg *fimpgo
 		} else {
 			if points != nil {
 				for i := range points {
-					pr.write(context, points[i])
+					if storage.IsHighFrequencyData(points[i].MeasurementName) {
+						// writing into aggregation store
+						fields, _ := points[i].Point.Fields()
+						agDp := processing.DataPoint{
+							MeasurementName: points[i].MeasurementName,
+							SeriesID:        points[i].SeriesID,
+							Tags:            points[i].Point.Tags(),
+							Fields:          fields,
+							AggregationFunc: points[i].AggregationFunc,
+							Value:           points[i].AggregationValue,
+						}
+						pr.rawAggregator.AddDataPoint(agDp)
+
+					}else {
+						pr.write(points[i]) // Writing directly to DB (writing to batch)
+					}
+
 				}
 			} else {
 				log.Debug("<tsdb> Message can't be mapped .Skipping .")
@@ -143,6 +162,24 @@ func (pr *Process) OnMessage(topic string, addr *fimpgo.Address , iotMsg *fimpgo
 	} else {
 		log.Tracef("<tsdb> Message from topic %s is skiped .", topic)
 	}
+}
+
+func (pr *Process) StartAggregatorWorker() {
+	go func() {
+		for dp := range pr.rawAggregator.OutputChannel() {
+			log.Debug("<tsdb> New aggregator event")
+			point, err := influx.NewPoint(dp.MeasurementName, dp.Tags, dp.Fields, time.Now())
+			if err == nil {
+				pr.write(&DataPoint{
+					MeasurementName:  dp.MeasurementName,
+					Point:            point,
+				})
+			}else {
+				log.Error("<tsdb> Can't create DP. Error:",err.Error())
+			}
+		}
+		log.Error("<tsdb> Aggregator worker has QUIT")
+	}()
 }
 
 // AddMessage Is used by batch loader
@@ -158,7 +195,7 @@ func (pr *Process) AddMessage(topic string, addr *fimpgo.Address , iotMsg *fimpg
 		} else {
 			if points != nil {
 				for i := range points {
-					pr.write(context, points[i])
+					pr.write(points[i])
 				}
 			} else {
 				log.Debug("<tsdb> Message can't be mapped .Skipping .")
@@ -170,7 +207,7 @@ func (pr *Process) AddMessage(topic string, addr *fimpgo.Address , iotMsg *fimpg
 }
 
 
-// Filter - transforms IotMsg into DB compatible struct
+// filter - transforms IotMsg into DB compatible struct
 func (pr *Process) filter(context *MsgContext, topic string, iotMsg *fimpgo.FimpMessage, domain string, filterID IDt) bool {
 	var result bool
 
@@ -228,17 +265,15 @@ func (pr *Process) filter(context *MsgContext, topic string, iotMsg *fimpgo.Fimp
 
 
 // write - writes data points into batch point
-func (pr *Process) write(context *MsgContext, point *DataPoint) {
+func (pr *Process) write(point *DataPoint) {
 	// log.Debugf("Point: %+v", point)
 	rpName := storage.ResolveWriteRetentionPolicyName(point.MeasurementName)
 	log.Debugf("<tsdb> pID = %d. Writing measurement: %s into %s",pr.ID, point.Point.Name(),rpName)
-	if context.measurementName != "" {
-		pr.writeMutex.Lock()
-		pr.batchPoints[rpName].AddPoint(point.Point)
-		pr.writeMutex.Unlock()
-		if len(pr.batchPoints[rpName].Points()) >= pr.Config.BatchMaxSize {
-			pr.WriteIntoDb()
-		}
+	pr.writeMutex.Lock()
+	pr.batchPoints[rpName].AddPoint(point.Point)
+	pr.writeMutex.Unlock()
+	if len(pr.batchPoints[rpName].Points()) >= pr.Config.BatchMaxSize {
+		pr.WriteIntoDb()
 	}
 }
 
