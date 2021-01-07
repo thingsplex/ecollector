@@ -119,7 +119,6 @@ func (pr *Process) OnMessage(topic string, addr *fimpgo.Address , iotMsg *fimpgo
 	}()
 	context := &MsgContext{time: time.Now()}
 	context.measurementName = iotMsg.Service+"."+iotMsg.Type
-
 	if pr.Config.SiteId!="" {
 		addr.GlobalPrefix = pr.Config.SiteId
 	}
@@ -150,7 +149,7 @@ func (pr *Process) OnMessage(topic string, addr *fimpgo.Address , iotMsg *fimpgo
 						pr.rawAggregator.AddDataPoint(agDp)
 
 					}else {
-						pr.write(points[i]) // Writing directly to DB (writing to batch)
+						pr.Write(points[i]) // Writing directly to DB (writing to batch)
 					}
 
 				}
@@ -170,7 +169,7 @@ func (pr *Process) StartAggregatorWorker() {
 			log.Debug("<tsdb> New aggregator event")
 			point, err := influx.NewPoint(dp.MeasurementName, dp.Tags, dp.Fields, time.Now())
 			if err == nil {
-				pr.write(&DataPoint{
+				pr.Write(&DataPoint{
 					MeasurementName:  dp.MeasurementName,
 					Point:            point,
 				})
@@ -195,7 +194,7 @@ func (pr *Process) AddMessage(topic string, addr *fimpgo.Address , iotMsg *fimpg
 		} else {
 			if points != nil {
 				for i := range points {
-					pr.write(points[i])
+					pr.Write(points[i])
 				}
 			} else {
 				log.Debug("<tsdb> Message can't be mapped .Skipping .")
@@ -263,33 +262,57 @@ func (pr *Process) filter(context *MsgContext, topic string, iotMsg *fimpgo.Fimp
 	return false
 }
 
-
-// write - writes data points into batch point
-func (pr *Process) write(point *DataPoint) {
+// Write - writes data points into batch point
+func (pr *Process) Write(point *DataPoint) {
 	// log.Debugf("Point: %+v", point)
 	rpName := storage.ResolveWriteRetentionPolicyName(point.MeasurementName)
 	log.Debugf("<tsdb> pID = %d. Writing measurement: %s into %s",pr.ID, point.Point.Name(),rpName)
 	pr.writeMutex.Lock()
-	pr.batchPoints[rpName].AddPoint(point.Point)
+	bp,ok := pr.batchPoints[rpName]
+	if ok {
+		bp.AddPoint(point.Point)
+	} else 	{
+		err := pr.InitBatchPoint(rpName)
+		if err != nil {
+			log.Error("<tsdb> Can't init batch points on Write operation . Error: ", err)
+			return
+		}
+		pr.batchPoints[rpName].AddPoint(point.Point)
+	}
 	pr.writeMutex.Unlock()
 	if len(pr.batchPoints[rpName].Points()) >= pr.Config.BatchMaxSize {
-		pr.WriteIntoDb()
+		pr.writeIntoDb()
 	}
 }
 
-//func (pr *Process) writeMultiple(context *MsgContext, point []*influx.Point) {
-//	rpName := pr.getRetentionPolicyName(context.measurementName)
-//	log.Debugf("<tsdb> Writing measurements: %s into %s", context.measurementName,rpName)
-//	// log.Debugf("Point: %+v", point)
-//	if context.measurementName != "" {
-//		pr.writeMutex.Lock()
-//		pr.batchPoints[rpName].AddPoints(point)
-//		pr.writeMutex.Unlock()
-//		if len(pr.batchPoints[rpName].Points()) >= pr.Config.BatchMaxSize {
-//			pr.WriteIntoDb()
-//		}
-//	}
-//}
+// WriteDirect - writes data points into batch point
+func (pr *Process) WriteDirect(rpName string ,point *influx.Point) {
+	if point == nil {
+		log.Info("<tsdb> Empty data point")
+		return
+	}
+	log.Debugf("<tsdb> pID = %d. Writing measurement: %s into %s",pr.ID, point.Name(),rpName)
+	pr.writeMutex.Lock()
+
+	bp,ok := pr.batchPoints[rpName]
+	if ok {
+		bp.AddPoint(point)
+	} else 	{
+		err := pr.InitBatchPoint(rpName)
+		if err != nil {
+			log.Error("<tsdb> Can't init batch points on Write operation . Error: ", err)
+			return
+		}
+		pr.batchPoints[rpName].AddPoint(point)
+	}
+
+	pr.writeMutex.Unlock()
+	if len(pr.batchPoints[rpName].Points()) >= pr.Config.BatchMaxSize {
+		pr.writeIntoDb()
+	}
+}
+
+
 
 // Configure should be used to replace new set of filters and selectors with new set .
 // Process should be restarted after Configure call
@@ -317,8 +340,8 @@ func (pr *Process) InitBatchPoint(bpName string) error {
 	return err
 }
 
-// WriteIntoDb - inserts record into db
-func (pr *Process) WriteIntoDb() error {
+// writeIntoDb - inserts record into db
+func (pr *Process) writeIntoDb() error {
 	// Mutex is needed to fix condition when the function is invoked by timer and batch size almost at the same time
 	defer func() {
 		pr.writeMutex.Unlock()
@@ -338,7 +361,7 @@ func (pr *Process) WriteIntoDb() error {
 				break
 			}else if strings.Contains(err.Error(),"field type conflict") {
 				break
-			}else if strings.Contains(err.Error(),"unable to parse") {
+			}else if strings.Contains(err.Error(),"unable to parse") || strings.Contains(err.Error(),"retention policy not found") {
 				break
 			} else  {
 				log.Error("Retrying error after 5 sec. Err:",err.Error())
@@ -348,12 +371,14 @@ func (pr *Process) WriteIntoDb() error {
 
 		if err != nil {
 			if strings.Contains(err.Error(),"unable to parse") {
-				log.Error("<tsdb> Batch write error , unable to parse packet.Error: ", err)
+				log.Error("<tsdb> Batch Write error , unable to parse packet.Error: ", err)
 			}else if strings.Contains(err.Error(),"field type conflict") {
 				log.Error("<tsdb> Field type conflict.Error: ", err)
-			} else  {
+			}else if strings.Contains(err.Error(),"retention policy not found") {
+				log.Error("<tsdb> Retention policy not found.Error: ", err)
+			}  else  {
 				pr.State = "LOST_CONNECTION"
-				log.Error("<tsdb> Batch write error , batch is dropped.Changing state to LOST_CONNECTION ", err)
+				log.Error("<tsdb> Batch Write error , batch is dropped.Changing state to LOST_CONNECTION ", err)
 			}
 			err = pr.InitBatchPoint(bpKey)
 
@@ -399,7 +424,7 @@ func (pr *Process) Start() error {
 	pr.ticker = time.NewTicker(time.Millisecond * pr.Config.SaveInterval)
 	go func() {
 		for _ = range pr.ticker.C {
-			pr.WriteIntoDb()
+			pr.writeIntoDb()
 		}
 	}()
 	err := pr.mqttTransport.Start()

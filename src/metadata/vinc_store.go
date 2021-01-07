@@ -37,6 +37,9 @@ func (r *VincMetadataStore) GetMetadataByAddress(topic string) (ServiceMetaRec ,
 	address := strings.Replace(topic,"pt:j1/mt:evt","",1)
 	address = strings.Replace(address,"pt:j1/mt:cmd","",1)
 	log.Tracef("Doing lookup of %s",address)
+	if r.vApi == nil {
+		return ServiceMetaRec{},fmt.Errorf("vApi is not initialized")
+	}
 	site,err := r.vApi.GetSite(true)
 	if err != nil {
 		return ServiceMetaRec{},err

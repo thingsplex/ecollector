@@ -2,11 +2,13 @@ package api
 
 import (
 	"github.com/futurehomeno/fimpgo"
+	influx "github.com/influxdata/influxdb1-client/v2"
 	log "github.com/sirupsen/logrus"
 	"github.com/thingsplex/ecollector/integration/tsdb"
 	"github.com/thingsplex/ecollector/model"
 	"os"
 	"strconv"
+	"time"
 )
 
 type AdminApi struct {
@@ -150,6 +152,33 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 			log.Error("<api> Error while querying data . Err:",err.Error())
 		}
 		msg = fimpgo.NewMessage("evt.tsdb.query_report", "ecollector", fimpgo.VTypeObject, response, nil, nil,iotMsg)
+
+	case "cmd.tsdb.write_data_points":
+		req := WriteDataPointsRequest{}
+		err := iotMsg.GetObjectValue(&req)
+		if err != nil {
+			log.Debug(" Wrong request value format for cmd.influxdb.write_data_points")
+			return
+		}
+		if req.ProcID <= 0 {
+			log.Error(" Wrong process ID")
+			return
+		}
+		proc := api.integr.GetProcessByID(req.ProcID)
+		if proc == nil {
+			log.Error(" Can't fine process with ID = ",req.ProcID)
+			return
+		}
+
+		for i := range req.DataPoints {
+			ts := time.Now()
+			idp,err := influx.NewPoint(req.DataPoints[i].Name, req.DataPoints[i].Tags, req.DataPoints[i].Fields, ts)
+			if err != nil {
+				log.Error("Can't create data point.Err:",err.Error())
+			}else {
+				proc.WriteDirect(req.Bucket,idp)
+			}
+		}
 
 	case "cmd.tsdb.get_data_points":
 		req := GetDataPointsRequest{}
