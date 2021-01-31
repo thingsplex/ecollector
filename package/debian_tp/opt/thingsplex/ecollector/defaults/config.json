@@ -7,5 +7,5 @@
   "log_file": "/var/log/thingsplex/ecollector/ecollector.log",
   "log_level": "info",
   "log_format": "text",
-  "disk_monitor_shutdown_limit": 85
+  "disk_monitor_shutdown_limit": 90
 }

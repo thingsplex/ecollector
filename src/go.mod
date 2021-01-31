@@ -9,6 +9,7 @@ require (
 	github.com/shirou/gopsutil v2.20.3+incompatible
 	github.com/sirupsen/logrus v1.3.0
 	github.com/spf13/viper v1.7.1
+	github.com/tobgu/qframe v0.3.5
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 )
 

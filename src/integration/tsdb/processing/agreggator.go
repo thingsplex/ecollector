@@ -31,7 +31,7 @@ type SValues struct {
 	dataPoint DataPoint
 }
 
-//DataPointAggregator stores data points in memory and generate aggregates every X seconds
+//DataPointAggregator is in-memory data point aggregator, it stores data points in memory and generate aggregates every X seconds
 type DataPointAggregator struct {
 	inputChannel        chan DataPoint
 	outputChannel       chan DataPoint
@@ -117,14 +117,14 @@ func (dpa *DataPointAggregator) calculateAggregates() {
 		switch v.dataPoint.AggregationFunc {
 		case AggregationFuncMean:
 			result, err = stats.Mean(v.values)
-			log.Debugf("<aggr> Mean value = %d for series = %s from values %v",result,v.dataPoint.SeriesID,v.values)
+			log.Debugf("<aggr> Mean value = %f for series = %s from values %v",result,v.dataPoint.SeriesID,v.values)
 		case AggregationFuncMin:
 			result, err = stats.Min(v.values)
 		case AggregationFuncMax:
 			result, err = stats.Min(v.values)
 		case AggregationFuncLast:
 			result = v.values[0]
-			log.Debugf("<aggr> LAST value = %d for series = %s from values %v",result,v.dataPoint.SeriesID,v.values)
+			log.Debugf("<aggr> LAST value = %f for series = %s from values %v",result,v.dataPoint.SeriesID,v.values)
 		}
 		if err != nil {
 			continue

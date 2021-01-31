@@ -4,6 +4,7 @@ import (
 	"fmt"
 	influx "github.com/influxdata/influxdb1-client/v2"
 	log "github.com/sirupsen/logrus"
+	"github.com/thingsplex/ecollector/integration/tsdb/processing"
 	"time"
 )
 
@@ -116,11 +117,6 @@ func (pr *InfluxV1Storage) GetDataPoints(fieldName,measurement,relativeTime,from
 			return nil
 		}
 		timeQuery = fmt.Sprintf("time >= '%s' AND time <= '%s' ",fromTime,toTime)
-		//timeInterval,err = CalculateDuration(fromTime,toTime)
-		//if err != nil {
-		//	log.Error("<ifv1> Can't calculate duration.Err:",err.Error())
-		//	return nil
-		//}
 	}else {
 		timeInterval = ResolveDurationFromRelativeTime(relativeTime)
 		userSetTimeGroupDuration := ResolveDurationFromRelativeTime(groupByTime)
@@ -184,6 +180,81 @@ func (pr *InfluxV1Storage) GetDataPoints(fieldName,measurement,relativeTime,from
 	}
 
 }
+
+// GetDataPoints - relative must be in format 1m,1h,1d,1w . If groupByTime is empty , aggregate function will be skipped
+func (pr *InfluxV1Storage) GetEnergyDataPoints(measurement,relativeTime,fromTime,toTime,groupByTime string, devicesInGroup map[string][]string ) *influx.Response {
+	// data is stored as accumulated data , this means data points always growing until reset
+	// Calculations :
+	// 1. group by - 1h/1d and by devices . We can only group by devices here.
+	// 2. calculate difference , each datapoint in the result contains energy consumed for every hour/day. Use "mod" for ever result , to avoid negative values
+	// 3. group by location/device-type and use sum aggregation function. That has to be done in code due to influx SQL limitations
+	//    3.1 - get all groups (locations/device-types)
+	//    3.2 - for each group , group by time with "sum" aggregation function
+	var retentionPolicyName,timeQuery string
+	var err error
+	var timeInterval time.Duration
+
+	if groupByTime != "1d" {
+		groupByTime = "1h"
+	}
+
+	if fromTime != "" && toTime != "" {
+		retentionPolicyName,err  = ResolveRetentionName(fromTime,toTime)
+		if err != nil {
+			log.Error("<ifv1> Can't resolve retention name.Err:",err.Error())
+			return nil
+		}
+		timeQuery = fmt.Sprintf("time >= '%s' AND time <= '%s' ",fromTime,toTime)
+	}else {
+		timeInterval = ResolveDurationFromRelativeTime(relativeTime)
+		userSetTimeGroupDuration := ResolveDurationFromRelativeTime(groupByTime)
+		if retentionPolicyName == "" {
+			retentionPolicyName = ResolveRetentionByElapsedTimeDuration(timeInterval)
+			aggregationDuration := GetRetentionTimeGroupDuration(retentionPolicyName)
+			if userSetTimeGroupDuration >= aggregationDuration {
+				retentionPolicyName = ResolveRetentionByTimeGroup(groupByTime)
+			}
+		}
+		timeQuery = fmt.Sprintf("time > now()-%s",relativeTime)
+	}
+
+
+	// Query - SELECT abs(difference(max("value"))) AS "value" FROM "historian"."gen_raw"."electricity_meter_energy" WHERE time > :dashboardTime: GROUP BY time(1h), "dev_id" FILL(null)
+     query := fmt.Sprintf("SELECT abs(difference(max(\"value\"))) AS \"value\" FROM \"historian\".\"%s\".\"electricity_meter_energy\" WHERE %s GROUP BY time(%s), \"dev_id\" FILL(null)",
+     	retentionPolicyName,timeQuery,groupByTime)
+
+	log.Debug("<ifv1> --- Final query :",query)
+
+	q := influx.NewQuery(query, pr.dbName, "s")
+	if response, err := pr.influxC.Query(q); err == nil {
+		log.Trace(response.Results)
+		if len(response.Results) > 0 {
+			tFrame := processing.NewEcDataFrame()
+			tFrame.LoadFromInfluxResponse(response.Results[0],"dev_id",devicesInGroup)
+			err = tFrame.AggregateByGroupAndTime()
+			if err != nil {
+				log.Error("<ifv1> Aggregation error 1 :",err.Error())
+				response.Err = err.Error()
+			}else {
+				r,err := tFrame.GetInfluxSeries()
+				if err != nil {
+					log.Error("<ifv1> Aggregation error 2 : ",err.Error())
+					response.Err = err.Error()
+				}
+				response.Results[0] = *r
+			}
+
+		}
+
+		return response
+	}else {
+		log.Error("<ifv1> Get datapoint Error: ",err.Error())
+		return nil
+	}
+
+	 return nil
+}
+
 
 func (pr *InfluxV1Storage) WriteDataPoints(bp influx.BatchPoints) error {
 	return pr.influxC.Write(bp)
@@ -336,3 +407,5 @@ func (pr *InfluxV1Storage) GetDbRetentionPolicies() ([]string,error) {
 func (pr *InfluxV1Storage)Close() {
 	pr.influxC.Close()
 }
+
+

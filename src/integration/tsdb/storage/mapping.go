@@ -155,3 +155,4 @@ func IsHighFrequencyData(measurementName string) bool {
 	}
 	return false
 }
+
