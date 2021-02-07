@@ -379,3 +379,32 @@ Response :
   "ctime": "2019-08-04T14:54:12.754+08:00",
   "uid": "4d110e44-1fc3-4b12-9f95-eb9cc84c0309"
 }
+
+pt:j1/mt:cmd/rt:app/rn:ecollector/ad:1
+
+{
+  "serv": "ecollector",
+  "type": "cmd.tsdb.get_energy_data_points",
+  "val_t": "object",
+  "val": {
+    "proc_id": 1,
+    "relative_time": "1d",
+    "from_time": "",
+    "to_time": "",
+    "group_by_time": "1h",
+    "group_by_tag": "location_id",
+    "fill_type": "previous",
+    "filters": {
+      "tags": {
+        "dir": "import"
+      }
+    }
+  },
+  "props": null,
+  "tags": null,
+  "resp_to": "pt:j1/mt:rsp/rt:app/rn:tplex-ui/ad:1",
+  "src": "tplex-ui",
+  "ver": "1",
+  "uid": "f08f29b0-7db7-472a-887a-1c7427d9fb43",
+  "topic": "pt:j1/mt:cmd/rt:app/rn:ecollector/ad:1"
+}

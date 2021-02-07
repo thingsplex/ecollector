@@ -203,6 +203,28 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 		response := proc.Storage().GetDataPoints(req.FieldName,req.MeasurementName,req.RelativeTime,req.FromTime,req.ToTime,req.GroupByTime,req.FillType,req.DataFunction,req.TransformFunction,req.GroupByTag,req.Filters)
 		msg = fimpgo.NewMessage("evt.tsdb.data_points_report", "ecollector", fimpgo.VTypeObject, response, nil, nil,iotMsg)
 
+	case "cmd.tsdb.get_energy_data_points":
+		req := GetDataPointsRequest{}
+		err := iotMsg.GetObjectValue(&req)
+		if err != nil {
+			log.Debug(" Wrong request value format for cmd.influxdb.get_data_points")
+			return
+		}
+
+		if req.ProcID <= 0 {
+			log.Error(" Wrong process ID")
+			return
+		}
+		// fieldName,measurement,relativeTime,fromTime,toTime,groupByTime,fillType, dataFunction,groupByField
+
+		proc := api.integr.GetProcessByID(req.ProcID)
+		if proc == nil {
+			log.Error(" Can't fine process with ID = ",req.ProcID)
+			return
+		}
+		response := proc.Storage().GetEnergyDataPoints(req.RelativeTime,req.FromTime,req.ToTime,req.GroupByTag,req.GroupByTag,req.Filters)
+		msg = fimpgo.NewMessage("evt.tsdb.data_points_report", "ecollector", fimpgo.VTypeObject, response, nil, nil,iotMsg)
+
 	case "cmd.tsdb.get_measurements":
 		val,err := iotMsg.GetStrMapValue()
 		if err != nil {

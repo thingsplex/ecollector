@@ -11,4 +11,6 @@ type MetadataStore interface {
 	GetMetadataByAddress(address string) (ServiceMetaRec , error)
 	Start() error
 	Stop() error
+	GetDevicesGroupedByType() (map[string][]string,error)
+	GetDevicesGroupedByLocation() (map[string][]string, error)
 }

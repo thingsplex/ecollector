@@ -67,3 +67,11 @@ func (sm *TpMetadataStore) GetMetadataByAddress(address string) (ServiceMetaRec 
 	}
 	return ServiceMetaRec{},errors.New("not found")
 }
+
+func (sm *TpMetadataStore) GetDevicesGroupedByType() (map[string][]string,error) {
+	return nil, nil
+}
+
+func (sm *TpMetadataStore) GetDevicesGroupedByLocation() (map[string][]string, error) {
+	return nil, nil
+}

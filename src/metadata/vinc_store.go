@@ -5,6 +5,7 @@ import (
 	"github.com/futurehomeno/fimpgo"
 	"github.com/futurehomeno/fimpgo/fimptype/primefimp"
 	log "github.com/sirupsen/logrus"
+	"strconv"
 	"strings"
 )
 
@@ -57,6 +58,54 @@ func (r *VincMetadataStore) GetMetadataByAddress(topic string) (ServiceMetaRec ,
 		log.Debugf("Device not found ")
 	}
 	return mrec,nil
+}
+
+func (r *VincMetadataStore) GetDevicesGroupedByLocation() (map[string][]string, error) {
+	var result map[string][]string
+
+	rooms , err := r.vApi.GetRooms(true)
+	if err != nil {
+		return nil, err
+	}
+	devices , err := r.vApi.GetDevices(true)
+	if err != nil {
+		return nil, err
+	}
+
+	for ri := range rooms {
+		var devicesInRoom []string
+		roomIdStr := strconv.Itoa(rooms[ri].ID)
+		for di := range devices {
+			if devices[di].Room == nil {
+				continue
+			}
+			if rooms[ri].ID == *devices[di].Room {
+				devicesInRoom = append(devicesInRoom,strconv.Itoa(devices[di].ID))
+			}
+		}
+		if len(devicesInRoom)>0 {
+			result[roomIdStr] = append(result[roomIdStr],strconv.Itoa(devices[ri].ID))
+		}
+	}
+	return result,err
+}
+
+func (r *VincMetadataStore) GetDevicesGroupedByType() (map[string][]string,error) {
+	var result map[string][]string
+	devices , err := r.vApi.GetDevices(true)
+	if err != nil {
+		return nil, err
+	}
+	for di := range devices {
+		devType := r.composeType(&devices[di])
+		dev,ok := result[devType]
+		if ok {
+			dev = append(dev,strconv.Itoa(devices[di].ID))
+		}else {
+			result[devType] = []string{strconv.Itoa(devices[di].ID)}
+		}
+	}
+	return result,err
 }
 
 func (r *VincMetadataStore) composeType(dev *primefimp.Device)string {

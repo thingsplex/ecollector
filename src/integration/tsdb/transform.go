@@ -12,6 +12,7 @@ import (
 const (
 	MeasurementElecMeterPower  = "electricity_meter_power"
 	MeasurementElecMeterEnergy = "electricity_meter_energy"
+	MeasurementElecMeterEnergySampled = "electricity_meter_energy_sampled"
 	DirectionImport            = "import"
 	DirectionExport            = "export"
 )
@@ -40,19 +41,33 @@ func DefaultTransform(context *MsgContext, topic string, addr *fimpgo.Address, i
 			val, err := iotMsg.GetFloatValue()
 			unit, _ := iotMsg.Properties["unit"]
 			if err == nil {
-				if unit == "W" {
-					mName = MeasurementElecMeterPower
-				} else if unit == "kWh" {
-					mName = MeasurementElecMeterEnergy
-				} else {
-					return nil, fmt.Errorf("unknown unit")
-				}
 				fields["value"] = val
 				fields["unit"] = unit
 				tags["dir"] = DirectionImport
+				if unit == "W" {
+					mName = MeasurementElecMeterPower
+					seriesID = fmt.Sprintf("%s;%s;import", MeasurementElecMeterPower, seriesID)
+				} else if unit == "kWh" {
+					mName = MeasurementElecMeterEnergy
+					seriesID = fmt.Sprintf("%s;%s;import", MeasurementElecMeterEnergy, seriesID)
+
+					point2, err := influx.NewPoint(MeasurementElecMeterEnergySampled, tags, fields, context.time)
+					if err == nil {
+						points = append(points, &DataPoint{
+							MeasurementName:  MeasurementElecMeterEnergySampled,
+							AggregationValue: val,
+							AggregationFunc:  processing.AggregationFuncDifference,
+							SeriesID:         seriesID ,
+							Point:            point2,
+						})
+					}
+
+				} else {
+					return nil, fmt.Errorf("unknown unit")
+				}
 				context.measurementName = mName
 				valueType = "_skip_"
-				seriesID = fmt.Sprintf("%s;import",seriesID)
+
 			} else {
 				return nil, err
 			}
@@ -69,6 +84,7 @@ func DefaultTransform(context *MsgContext, topic string, addr *fimpgo.Address, i
 				pTags := getDefaultTags(context, topic, domain)
 				pTags["dir"] = DirectionImport
 				pFields := map[string]interface{}{"value": fields["e_import"], "unit": "kWh"}
+
 				point, err := influx.NewPoint(MeasurementElecMeterEnergy, pTags, pFields, context.time)
 				if err == nil {
 					points = append(points, &DataPoint{
@@ -79,12 +95,25 @@ func DefaultTransform(context *MsgContext, topic string, addr *fimpgo.Address, i
 						Point:            point,
 					})
 				}
+
+				point2, err := influx.NewPoint(MeasurementElecMeterEnergySampled, pTags, pFields, context.time)
+				if err == nil {
+					points = append(points, &DataPoint{
+						MeasurementName:  MeasurementElecMeterEnergySampled,
+						AggregationValue: fields["e_import"],
+						AggregationFunc:  processing.AggregationFuncDifference,
+						SeriesID:         fmt.Sprintf("%s;%s;import", MeasurementElecMeterEnergySampled, seriesID),
+						Point:            point2,
+					})
+				}
+
 			}
 			fields["e_export"], eExportOk = val["e_export"]
 			if eExportOk {
 				pTags := getDefaultTags(context, topic, domain)
 				pTags["dir"] = DirectionExport
 				pFields := map[string]interface{}{"value": fields["e_export"], "unit": "kWh"}
+
 				point, err := influx.NewPoint(MeasurementElecMeterEnergy, pTags, pFields, context.time)
 				if err == nil {
 					points = append(points, &DataPoint{
@@ -95,6 +124,18 @@ func DefaultTransform(context *MsgContext, topic string, addr *fimpgo.Address, i
 						Point:            point,
 					})
 				}
+
+				point2, err := influx.NewPoint(MeasurementElecMeterEnergySampled, pTags, pFields, context.time)
+				if err == nil {
+					points = append(points, &DataPoint{
+						MeasurementName:  MeasurementElecMeterEnergySampled,
+						AggregationValue: fields["e_export"],
+						AggregationFunc:  processing.AggregationFuncDifference,
+						SeriesID:         fmt.Sprintf("%s;%s;export", MeasurementElecMeterEnergySampled, seriesID),
+						Point:            point2,
+					})
+				}
+
 			}
 
 			fields["last_e_export"], _ = val["last_e_export"]

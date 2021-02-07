@@ -137,6 +137,9 @@ func CalculateDuration(fromTime,toTime string) (time.Duration,error) {
 }
 
 func ResolveWriteRetentionPolicyName(mName string ) string {
+	if mName == "electricity_meter_energy_sampled" {
+		return "gen_year"
+	}
 	if IsHighFrequencyData(mName){
 		return "gen_raw"
 	}
@@ -147,6 +150,7 @@ func IsHighFrequencyData(measurementName string) bool {
 	if measurementName == "electricity_meter_power" ||
 		measurementName == "electricity_meter_energy" ||
 		measurementName == "electricity_meter_ext" ||
+		measurementName == "electricity_meter_energy_sampled" ||
 		strings.Contains(measurementName,"sensor_") {
 			if strings.Contains(measurementName,"sensor_presence") || strings.Contains(measurementName,"sensor_contact") {
 				return false

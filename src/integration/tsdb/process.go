@@ -32,6 +32,10 @@ type Process struct {
 	serviceMedataStore metadata.MetadataStore // metadata store is used for event enrichment
 }
 
+func (pr *Process) ServiceMedataStore() metadata.MetadataStore {
+	return pr.serviceMedataStore
+}
+
 func (pr *Process) Storage() *storage.InfluxV1Storage {
 	return pr.storage
 }
@@ -43,7 +47,7 @@ func NewProcess(config *ProcessConfig) *Process {
 	proc.apiMutex = &sync.Mutex{}
 	proc.State = "LOADED"
 	proc.ID = config.ID
-	proc.rawAggregator = processing.NewDataPointAggregator(30*time.Second)
+	proc.rawAggregator = processing.NewDataPointAggregator(30*time.Second,10)
 	return &proc
 }
 

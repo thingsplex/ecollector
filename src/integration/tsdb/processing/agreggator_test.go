@@ -14,7 +14,7 @@ func Setup() {
 
 func TestDataPointAggregator_AddDataPoint(t *testing.T) {
 	Setup()
-	da := NewDataPointAggregator(5 * time.Second)
+	da := NewDataPointAggregator(5 * time.Second,1)
 
 	go func() {
 		var i float64
@@ -60,6 +60,31 @@ func TestDataPointAggregator_AddDataPoint(t *testing.T) {
 		}
 	}
 
+}
 
+func TestDataPointAggregator_calculateDifference(t *testing.T) {
+	da := NewDataPointAggregator(5 * time.Second,1)
+	vals := []float64{10,12,14,16,40}
+	r := da.calculateDifference(vals)
+	if r != 30 {
+		t.Error("Error 1 , result = ",r)
+	}
+
+	vals2 := []float64{10,12,10,20,30}
+	r2 := da.calculateDifference(vals2)
+	if r2 != 22 {
+		t.Error("Error 2 , result = ",r2)
+	}
+	vals3 := []float64{10}
+	r3 := da.calculateDifference(vals3)
+	if r3 != 0 {
+		t.Error("Error 3 , result = ",r3)
+	}
+
+	vals4 := []float64{}
+	r4 := da.calculateDifference(vals4)
+	if r4 != 0 {
+		t.Error("Error 3 , result = ",r4)
+	}
 
 }
