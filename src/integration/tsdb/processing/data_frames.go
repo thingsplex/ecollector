@@ -1,13 +1,5 @@
 package processing
 
-import (
-	"github.com/influxdata/influxdb1-client/models"
-	client "github.com/influxdata/influxdb1-client/v2"
-	"github.com/tobgu/qframe"
-	"github.com/tobgu/qframe/config/groupby"
-	"os"
-)
-
 
 /*
 {
@@ -352,143 +344,143 @@ import (
 }
  */
 
-type MergedRow struct {
-	time int
-	val  float64
-	//devId string
-	groupName string
-}
-
-
-type EcDataFrame struct {
-	qFrame qframe.QFrame
-	devicesInGroup map[string][]string
-}
-
-func (df *EcDataFrame) Frame() qframe.QFrame {
-	return df.qFrame
-}
-
-func (df *EcDataFrame) SetFrame(qFrame qframe.QFrame) {
-	df.qFrame = qFrame
-}
-
-func NewEcDataFrame() *EcDataFrame {
-	return &EcDataFrame{}
-}
-
-func (df *EcDataFrame) LoadFromInfluxResponse(result client.Result,tagName string, devicesInGroup map[string][]string)  {
-	// merge all series into flat table
-	var mergedResult []MergedRow
-	var rowCounter uint32
-	df.devicesInGroup = devicesInGroup
-	for si := range result.Series {
-		for groupName,devsInGroup := range devicesInGroup { // regrouping records
-			for _, devInGroup := range devsInGroup {
-				if result.Series[si].Tags[tagName] == devInGroup {
-					for vi := range result.Series[si].Values {
-						time := int(result.Series[si].Values[vi][0].(float64))
-						value := result.Series[si].Values[vi][1].(float64)
-						mergedResult = append(mergedResult,MergedRow{
-							time:  time,
-							val:   value,
-							//devId: result.Series[si].Tags[tagName],
-							groupName: groupName,
-						})
-						rowCounter++
-					}
-				}
-			}
-		}
-	}
-
-	//  Creating data frame
-	timeCol := make([]int,0,rowCounter)
-	//devIdCol := make([]string,0,rowCounter)
-	valCol := make([]float64,0,rowCounter)
-	groupNameCol := make([]string,0,rowCounter)
-
-	for mi := range mergedResult {
-		timeCol = append(timeCol,mergedResult[mi].time)
-		//devIdCol = append(devIdCol,mergedResult[mi].devId)
-		valCol = append(valCol,mergedResult[mi].val)
-		groupNameCol = append(groupNameCol,mergedResult[mi].groupName)
-	}
-
-	df.qFrame = qframe.New( map[string]interface{}{"time": timeCol,"val":valCol,"group":groupNameCol})
-}
-
-// AggregateByGroupAndTime aggregates data by group and time using "sum" function
-func (df *EcDataFrame) AggregateByGroupAndTime() error {
-	intSum := func(xx []float64) float64 {
-		var result float64
-		for _, x := range xx {
-			result += x
-		}
-		return result
-	}
-	// Creating new frame that contains grouped and ordered data
-	df.qFrame = df.qFrame.GroupBy(groupby.Columns("time","group")).Aggregate(qframe.Aggregation{Fn: intSum, Column: "val"}).Sort(qframe.Order{Column: "time"})
-	return nil
-}
-
-// AggregateByGroup aggregates data by group using "sum" function
-func (df *EcDataFrame) AggregateByGroup() error {
-	intSum := func(xx []float64) float64 {
-		var result float64
-		for _, x := range xx {
-			result += x
-		}
-		return result
-	}
-	// Creating new frame that contains grouped and ordered data
-	df.qFrame = df.qFrame.GroupBy(groupby.Columns("group")).Aggregate(qframe.Aggregation{Fn: intSum, Column: "val"})
-	return nil
-}
-
-func (df *EcDataFrame) GetInfluxSeries() (*client.Result,error) {
-	var series []models.Row
-
-	for group,_ := range df.devicesInGroup {
-		newF := df.qFrame.Filter(qframe.Filter{Column: "group", Comparator: "=", Arg: group})
-		timeView,err := newF.IntView("time")
-		if err != nil {
-			return nil, err
-		}
-		valView,err := newF.FloatView("val")
-		if err != nil {
-			return nil, err
-		}
-
-		var values [][]interface{}
-		for iv:=0;iv<newF.Len();iv++ {
-			value := []interface{}{timeView.ItemAt(iv),valView.ItemAt(iv)}
-			values = append(values,value)
-		}
-
-		row := models.Row{
-			Name:    "",
-			Tags: map[string]string{"group":group},
-			Columns: []string{"time","value"},
-			Values:  values,
-			Partial: false,
-		}
-		series = append(series,row)
-
-	}
-
-	result := &client.Result{
-		Series:   series,
-		Messages: nil,
-		Err:      "",
-	}
-	return result,nil
-}
-
-func (df *EcDataFrame) SaveToCSVFile(fileName string) error {
-	f, err := os.Create(fileName)
-	if err != nil {
-		return err
-	}
-	return df.qFrame.ToCSV(f)
-}
+//type MergedRow struct {
+//	time int
+//	val  float64
+//	//devId string
+//	groupName string
+//}
+//
+//
+//type EcDataFrame struct {
+//	qFrame qframe.QFrame
+//	devicesInGroup map[string][]string
+//}
+//
+//func (df *EcDataFrame) Frame() qframe.QFrame {
+//	return df.qFrame
+//}
+//
+//func (df *EcDataFrame) SetFrame(qFrame qframe.QFrame) {
+//	df.qFrame = qFrame
+//}
+//
+//func NewEcDataFrame() *EcDataFrame {
+//	return &EcDataFrame{}
+//}
+//
+//func (df *EcDataFrame) LoadFromInfluxResponse(result client.Result,tagName string, devicesInGroup map[string][]string)  {
+//	// merge all series into flat table
+//	var mergedResult []MergedRow
+//	var rowCounter uint32
+//	df.devicesInGroup = devicesInGroup
+//	for si := range result.Series {
+//		for groupName,devsInGroup := range devicesInGroup { // regrouping records
+//			for _, devInGroup := range devsInGroup {
+//				if result.Series[si].Tags[tagName] == devInGroup {
+//					for vi := range result.Series[si].Values {
+//						time := int(result.Series[si].Values[vi][0].(float64))
+//						value := result.Series[si].Values[vi][1].(float64)
+//						mergedResult = append(mergedResult,MergedRow{
+//							time:  time,
+//							val:   value,
+//							//devId: result.Series[si].Tags[tagName],
+//							groupName: groupName,
+//						})
+//						rowCounter++
+//					}
+//				}
+//			}
+//		}
+//	}
+//
+//	//  Creating data frame
+//	timeCol := make([]int,0,rowCounter)
+//	//devIdCol := make([]string,0,rowCounter)
+//	valCol := make([]float64,0,rowCounter)
+//	groupNameCol := make([]string,0,rowCounter)
+//
+//	for mi := range mergedResult {
+//		timeCol = append(timeCol,mergedResult[mi].time)
+//		//devIdCol = append(devIdCol,mergedResult[mi].devId)
+//		valCol = append(valCol,mergedResult[mi].val)
+//		groupNameCol = append(groupNameCol,mergedResult[mi].groupName)
+//	}
+//
+//	df.qFrame = qframe.New( map[string]interface{}{"time": timeCol,"val":valCol,"group":groupNameCol})
+//}
+//
+//// AggregateByGroupAndTime aggregates data by group and time using "sum" function
+//func (df *EcDataFrame) AggregateByGroupAndTime() error {
+//	intSum := func(xx []float64) float64 {
+//		var result float64
+//		for _, x := range xx {
+//			result += x
+//		}
+//		return result
+//	}
+//	// Creating new frame that contains grouped and ordered data
+//	df.qFrame = df.qFrame.GroupBy(groupby.Columns("time","group")).Aggregate(qframe.Aggregation{Fn: intSum, Column: "val"}).Sort(qframe.Order{Column: "time"})
+//	return nil
+//}
+//
+//// AggregateByGroup aggregates data by group using "sum" function
+//func (df *EcDataFrame) AggregateByGroup() error {
+//	intSum := func(xx []float64) float64 {
+//		var result float64
+//		for _, x := range xx {
+//			result += x
+//		}
+//		return result
+//	}
+//	// Creating new frame that contains grouped and ordered data
+//	df.qFrame = df.qFrame.GroupBy(groupby.Columns("group")).Aggregate(qframe.Aggregation{Fn: intSum, Column: "val"})
+//	return nil
+//}
+//
+//func (df *EcDataFrame) GetInfluxSeries() (*client.Result,error) {
+//	var series []models.Row
+//
+//	for group,_ := range df.devicesInGroup {
+//		newF := df.qFrame.Filter(qframe.Filter{Column: "group", Comparator: "=", Arg: group})
+//		timeView,err := newF.IntView("time")
+//		if err != nil {
+//			return nil, err
+//		}
+//		valView,err := newF.FloatView("val")
+//		if err != nil {
+//			return nil, err
+//		}
+//
+//		var values [][]interface{}
+//		for iv:=0;iv<newF.Len();iv++ {
+//			value := []interface{}{timeView.ItemAt(iv),valView.ItemAt(iv)}
+//			values = append(values,value)
+//		}
+//
+//		row := models.Row{
+//			Name:    "",
+//			Tags: map[string]string{"group":group},
+//			Columns: []string{"time","value"},
+//			Values:  values,
+//			Partial: false,
+//		}
+//		series = append(series,row)
+//
+//	}
+//
+//	result := &client.Result{
+//		Series:   series,
+//		Messages: nil,
+//		Err:      "",
+//	}
+//	return result,nil
+//}
+//
+//func (df *EcDataFrame) SaveToCSVFile(fileName string) error {
+//	f, err := os.Create(fileName)
+//	if err != nil {
+//		return err
+//	}
+//	return df.qFrame.ToCSV(f)
+//}

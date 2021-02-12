@@ -37,7 +37,8 @@ func DefaultTransform(context *MsgContext, topic string, addr *fimpgo.Address, i
 	switch iotMsg.Service {
 	case "meter_elec", "sensor_power":
 		var mName string
-		if iotMsg.Type == "evt.meter.report" || iotMsg.Type == "evt.sensor.report" {
+		tags["service"] = iotMsg.Service
+ 		if iotMsg.Type == "evt.meter.report" || iotMsg.Type == "evt.sensor.report" {
 			val, err := iotMsg.GetFloatValue()
 			unit, _ := iotMsg.Properties["unit"]
 			if err == nil {
@@ -83,6 +84,7 @@ func DefaultTransform(context *MsgContext, topic string, addr *fimpgo.Address, i
 			if eImportOk {
 				pTags := getDefaultTags(context, topic, domain)
 				pTags["dir"] = DirectionImport
+				pTags["service"] = iotMsg.Service
 				pFields := map[string]interface{}{"value": fields["e_import"], "unit": "kWh"}
 
 				point, err := influx.NewPoint(MeasurementElecMeterEnergy, pTags, pFields, context.time)
@@ -112,6 +114,7 @@ func DefaultTransform(context *MsgContext, topic string, addr *fimpgo.Address, i
 			if eExportOk {
 				pTags := getDefaultTags(context, topic, domain)
 				pTags["dir"] = DirectionExport
+				pTags["service"] = iotMsg.Service
 				pFields := map[string]interface{}{"value": fields["e_export"], "unit": "kWh"}
 
 				point, err := influx.NewPoint(MeasurementElecMeterEnergy, pTags, pFields, context.time)
@@ -153,6 +156,7 @@ func DefaultTransform(context *MsgContext, topic string, addr *fimpgo.Address, i
 				// Creating separate measurement
 				pTags := getDefaultTags(context, topic, domain)
 				pTags["dir"] = DirectionImport
+				pTags["service"] = iotMsg.Service
 				//log.Debug("Writing p_import , value = ",pImport)
 				pFields := map[string]interface{}{"value": pImport, "unit": "W"}
 				point, err := influx.NewPoint(MeasurementElecMeterPower, pTags, pFields, context.time)
@@ -177,6 +181,7 @@ func DefaultTransform(context *MsgContext, topic string, addr *fimpgo.Address, i
 				// Creating separate measurement
 				pTags := getDefaultTags(context, topic, domain)
 				pTags["dir"] = DirectionExport
+				pTags["service"] = iotMsg.Service
 				pFields := map[string]interface{}{"value": pExport, "unit": "W"}
 				point, err := influx.NewPoint(MeasurementElecMeterPower, pTags, pFields, context.time)
 				if err == nil {

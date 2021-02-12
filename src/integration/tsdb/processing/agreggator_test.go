@@ -87,4 +87,11 @@ func TestDataPointAggregator_calculateDifference(t *testing.T) {
 		t.Error("Error 3 , result = ",r4)
 	}
 
+	//30.9099998474121 30.9200000762939
+
+	vals5 := []float64{30.9099998474121,30.9200000762939}
+	r5 := da.calculateDifference(vals5)
+	if r5 != 0.01000022888180041 {
+		t.Error("Error 3 , result = ",r5)
+	}
 }

@@ -151,6 +151,7 @@ func (dpa *DataPointAggregator) calculateAggregates(filterFunc int) {
 			if filterFunc != AggregationFuncDifference {
 				continue
 			}
+
 			result = dpa.calculateDifference(v.values)
 			log.Debugf("<aggr> DIFF value = %f for series = %s from values %v",result,v.dataPoint.SeriesID,v.values)
 
@@ -194,15 +195,25 @@ func (dpa *DataPointAggregator) calculateDifference(values []float64) float64 {
 	if vlen <= 1 {
 		return 0
 	}
-	if vlen > 2 {
+	if vlen >= 2 {
 		// We need to verify that all values are growing . It might happen that meter has reset internal counter.
-		prevVal := values[0]
-		for i := range values {
-			if values[i]>=prevVal {
-				result += values[i] - prevVal
+		// [ 1 , 2 , 3 ]
+
+		for i:=0;i < (vlen - 1);i++ {
+			if values[i+1]>=values[i] {
+				result += values[i+1] - values[i]
+			}else {
+				log.Info("<aggr> Smaller ",values[i+1])
 			}
-			prevVal = values[i]
 		}
+
+		//prevVal := values[0]
+		//for i := range values {
+		//	if values[i]>=prevVal {
+		//		result += values[i] - prevVal
+		//	}
+		//	prevVal = values[i]
+		//}
 	}
 	return result
 }

@@ -234,6 +234,7 @@ func (pr *InfluxV1Storage) GetEnergyDataPoints(relativeTime,fromTime,toTime,grou
 			//	response.Results[0] = *r
 			//}
 		//}
+
 		return response
 	}else {
 		log.Error("<ifv1> Get datapoint Error: ",err.Error())
