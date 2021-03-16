@@ -10,11 +10,13 @@ import (
 )
 
 const (
-	MeasurementElecMeterPower  = "electricity_meter_power"
-	MeasurementElecMeterEnergy = "electricity_meter_energy"
+	MeasurementElecMeterPower         = "electricity_meter_power"
+	MeasurementElecMeterEnergy        = "electricity_meter_energy"
 	MeasurementElecMeterEnergySampled = "electricity_meter_energy_sampled"
-	DirectionImport            = "import"
-	DirectionExport            = "export"
+	DirectionImport                   = "import"
+	DirectionExport                   = "export"
+
+	MaxAllowedPower                   = 30000
 )
 
 // DefaultTransform - transforms IotMsg into InfluxDb datapoint
@@ -38,14 +40,23 @@ func DefaultTransform(context *MsgContext, topic string, addr *fimpgo.Address, i
 	case "meter_elec", "sensor_power":
 		var mName string
 		tags["service"] = iotMsg.Service
- 		if iotMsg.Type == "evt.meter.report" || iotMsg.Type == "evt.sensor.report" {
+		if iotMsg.Type == "evt.meter.report" || iotMsg.Type == "evt.sensor.report" {
 			val, err := iotMsg.GetFloatValue()
 			unit, _ := iotMsg.Properties["unit"]
 			if err == nil {
 				fields["value"] = val
 				fields["unit"] = unit
 				tags["dir"] = DirectionImport
-				if unit == "W" {
+
+				if unit == "W" || unit == "kW" {
+					if unit == "kW" {
+						val = 1000*val
+						fields["value"] = val
+					}
+
+					if val > MaxAllowedPower { // if valued is higher then 30 kW , it must be an error
+						return nil, fmt.Errorf("value is too big")
+					}
 					mName = MeasurementElecMeterPower
 					seriesID = fmt.Sprintf("%s;%s;import", MeasurementElecMeterPower, seriesID)
 				} else if unit == "kWh" {
@@ -58,7 +69,7 @@ func DefaultTransform(context *MsgContext, topic string, addr *fimpgo.Address, i
 							MeasurementName:  MeasurementElecMeterEnergySampled,
 							AggregationValue: val,
 							AggregationFunc:  processing.AggregationFuncDifference,
-							SeriesID:         seriesID ,
+							SeriesID:         seriesID,
 							Point:            point2,
 						})
 					}
@@ -157,7 +168,9 @@ func DefaultTransform(context *MsgContext, topic string, addr *fimpgo.Address, i
 				pTags := getDefaultTags(context, topic, domain)
 				pTags["dir"] = DirectionImport
 				pTags["service"] = iotMsg.Service
-				//log.Debug("Writing p_import , value = ",pImport)
+				if pImport > MaxAllowedPower { // if valued is higher then 30 kW , it must be an error
+					return nil, fmt.Errorf("value is too big")
+				}
 				pFields := map[string]interface{}{"value": pImport, "unit": "W"}
 				point, err := influx.NewPoint(MeasurementElecMeterPower, pTags, pFields, context.time)
 				if err == nil {
@@ -182,6 +195,9 @@ func DefaultTransform(context *MsgContext, topic string, addr *fimpgo.Address, i
 				pTags := getDefaultTags(context, topic, domain)
 				pTags["dir"] = DirectionExport
 				pTags["service"] = iotMsg.Service
+				if pExport > MaxAllowedPower { // if valued is higher then 30 kW , it must be an error
+					return nil, fmt.Errorf("value is too big")
+				}
 				pFields := map[string]interface{}{"value": pExport, "unit": "W"}
 				point, err := influx.NewPoint(MeasurementElecMeterPower, pTags, pFields, context.time)
 				if err == nil {

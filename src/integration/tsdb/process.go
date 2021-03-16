@@ -47,7 +47,7 @@ func NewProcess(config *ProcessConfig) *Process {
 	proc.apiMutex = &sync.Mutex{}
 	proc.State = "LOADED"
 	proc.ID = config.ID
-	proc.rawAggregator = processing.NewDataPointAggregator(30*time.Second,10)
+	proc.rawAggregator = processing.NewDataPointAggregator(30*time.Second, 10)
 	return &proc
 }
 
@@ -61,7 +61,7 @@ func (pr *Process) Init() error {
 	pr.State = "INIT_FAILED"
 	log.Info("<tsdb>Initializing influx client.")
 
-	pr.storage,err = storage.NewInfluxV1Storage(pr.Config.InfluxAddr,pr.Config.InfluxUsername,pr.Config.InfluxPassword,pr.Config.InfluxDB)
+	pr.storage, err = storage.NewInfluxV1Storage(pr.Config.InfluxAddr, pr.Config.InfluxUsername, pr.Config.InfluxPassword, pr.Config.InfluxDB)
 
 	if err != nil {
 		return err
@@ -78,10 +78,10 @@ func (pr *Process) Init() error {
 		log.Info("Setting up retention policies")
 		if pr.Config.Profile == "optimized" {
 			pr.storage.InitDefaultBuckets()
-		}else {
+		} else {
 			pr.storage.InitSimpleBuckets()
 		}
-	}else {
+	} else {
 		log.Info("<tsdb> Database initialization is skipped.(turned off in config)")
 
 	}
@@ -99,41 +99,41 @@ func (pr *Process) Init() error {
 	log.Info("<tsdb> Initializing MQTT adapter.")
 	//"tcp://localhost:1883", "blackflowint", "", ""
 
-	pr.mqttTransport = fimpgo.NewMqttTransport(pr.Config.MqttBrokerAddr,pr.Config.MqttClientID,pr.Config.MqttBrokerUsername, pr.Config.MqttBrokerPassword,true,1,1)
+	pr.mqttTransport = fimpgo.NewMqttTransport(pr.Config.MqttBrokerAddr, pr.Config.MqttClientID, pr.Config.MqttBrokerUsername, pr.Config.MqttBrokerPassword, true, 1, 1)
 	pr.mqttTransport.SetMessageHandler(pr.OnMessage)
 	log.Info("<tsdb> MQTT adapter initialization completed.")
 	if pr.State == "INIT_FAILED" {
 		pr.State = "INITIALIZED"
 	}
 	pr.StartAggregatorWorker()
-	log.Info("<tsdb> the process init state =",pr.State )
+	log.Info("<tsdb> the process init state =", pr.State)
 	return nil
 }
 
 // OnMessage is invoked by an adapter on every new message
 // The code is executed in callers goroutine
-func (pr *Process) OnMessage(topic string, addr *fimpgo.Address , iotMsg *fimpgo.FimpMessage, rawMessage []byte) {
+func (pr *Process) OnMessage(topic string, addr *fimpgo.Address, iotMsg *fimpgo.FimpMessage, rawMessage []byte) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Error("---PANIC----")
-			log.Errorf("OnMessage Err:%v",r)
+			log.Errorf("OnMessage Err:%v", r)
 			debug.PrintStack()
 
 		}
 	}()
 	context := &MsgContext{time: time.Now()}
-	context.measurementName = iotMsg.Service+"."+iotMsg.Type
-	if pr.Config.SiteId!="" {
+	context.measurementName = iotMsg.Service + "." + iotMsg.Type
+	if pr.Config.SiteId != "" {
 		addr.GlobalPrefix = pr.Config.SiteId
 	}
 	if pr.filter(context, topic, iotMsg, addr.GlobalPrefix, 0) {
-		meta ,err := pr.serviceMedataStore.GetMetadataByAddress(topic)
+		meta, err := pr.serviceMedataStore.GetMetadataByAddress(topic)
 		if err == nil {
 			context.metadata = &meta
-		}else {
+		} else {
 			log.Debug("No metadata found")
 		}
-		points, err := pr.transform(context, topic,addr, iotMsg, addr.GlobalPrefix)
+		points, err := pr.transform(context, topic, addr, iotMsg, addr.GlobalPrefix)
 		if err != nil {
 			log.Errorf("<tsdb> Transformation error: %s", err)
 		} else {
@@ -142,6 +142,13 @@ func (pr *Process) OnMessage(topic string, addr *fimpgo.Address , iotMsg *fimpgo
 					if storage.IsHighFrequencyData(points[i].MeasurementName) {
 						// writing into aggregation store
 						fields, _ := points[i].Point.Fields()
+						// setting device profile
+						prof := processing.SProfile{}
+
+						if meta.DeviceType == metadata.DeviceTypeMainMeter {
+							prof.HourlyAccumulatedValue = true
+						}
+
 						agDp := processing.DataPoint{
 							MeasurementName: points[i].MeasurementName,
 							SeriesID:        points[i].SeriesID,
@@ -149,10 +156,12 @@ func (pr *Process) OnMessage(topic string, addr *fimpgo.Address , iotMsg *fimpgo
 							Fields:          fields,
 							AggregationFunc: points[i].AggregationFunc,
 							Value:           points[i].AggregationValue,
+							Profile:         prof,
+							Time:            time.Now(),
 						}
-						pr.rawAggregator.AddDataPoint(agDp)
+						pr.rawAggregator.AddDataPoint(agDp) // Writing to aggregator
 
-					}else {
+					} else {
 						pr.Write(points[i]) // Writing directly to DB (writing to batch)
 					}
 
@@ -171,14 +180,14 @@ func (pr *Process) StartAggregatorWorker() {
 	go func() {
 		for dp := range pr.rawAggregator.OutputChannel() {
 			log.Debug("<tsdb> New aggregator event")
-			point, err := influx.NewPoint(dp.MeasurementName, dp.Tags, dp.Fields, time.Now())
+			point, err := influx.NewPoint(dp.MeasurementName, dp.Tags, dp.Fields, dp.Time)
 			if err == nil {
 				pr.Write(&DataPoint{
-					MeasurementName:  dp.MeasurementName,
-					Point:            point,
+					MeasurementName: dp.MeasurementName,
+					Point:           point,
 				})
-			}else {
-				log.Error("<tsdb> Can't create DP. Error:",err.Error())
+			} else {
+				log.Error("<tsdb> Can't create DP. Error:", err.Error())
 			}
 		}
 		log.Error("<tsdb> Aggregator worker has QUIT")
@@ -187,11 +196,11 @@ func (pr *Process) StartAggregatorWorker() {
 
 // AddMessage Is used by batch loader
 // The code is executed in callers goroutine
-func (pr *Process) AddMessage(topic string, addr *fimpgo.Address , iotMsg *fimpgo.FimpMessage, modTime time.Time) {
+func (pr *Process) AddMessage(topic string, addr *fimpgo.Address, iotMsg *fimpgo.FimpMessage, modTime time.Time) {
 	// log.Debugf("New msg of class = %s", iotMsg.Class
 	context := &MsgContext{time: modTime}
 	if pr.filter(context, topic, iotMsg, addr.GlobalPrefix, 0) {
-		points, err := pr.transform(context, topic,addr, iotMsg, addr.GlobalPrefix)
+		points, err := pr.transform(context, topic, addr, iotMsg, addr.GlobalPrefix)
 
 		if err != nil {
 			log.Errorf("<tsdb> Transformation error: %s", err)
@@ -208,7 +217,6 @@ func (pr *Process) AddMessage(topic string, addr *fimpgo.Address , iotMsg *fimpg
 		log.Debugf("<tsdb> Message from topic %s is skiped .", topic)
 	}
 }
-
 
 // filter - transforms IotMsg into DB compatible struct
 func (pr *Process) filter(context *MsgContext, topic string, iotMsg *fimpgo.FimpMessage, domain string, filterID IDt) bool {
@@ -270,12 +278,12 @@ func (pr *Process) filter(context *MsgContext, topic string, iotMsg *fimpgo.Fimp
 func (pr *Process) Write(point *DataPoint) {
 	// log.Debugf("Point: %+v", point)
 	rpName := storage.ResolveWriteRetentionPolicyName(point.MeasurementName)
-	log.Debugf("<tsdb> pID = %d. Writing measurement: %s into %s",pr.ID, point.Point.Name(),rpName)
+	log.Debugf("<tsdb> pID = %d. Writing measurement: %s into %s", pr.ID, point.Point.Name(), rpName)
 	pr.writeMutex.Lock()
-	bp,ok := pr.batchPoints[rpName]
+	bp, ok := pr.batchPoints[rpName]
 	if ok {
 		bp.AddPoint(point.Point)
-	} else 	{
+	} else {
 		err := pr.InitBatchPoint(rpName)
 		if err != nil {
 			log.Error("<tsdb> Can't init batch points on Write operation . Error: ", err)
@@ -290,18 +298,18 @@ func (pr *Process) Write(point *DataPoint) {
 }
 
 // WriteDirect - writes data points into batch point
-func (pr *Process) WriteDirect(rpName string ,point *influx.Point) {
+func (pr *Process) WriteDirect(rpName string, point *influx.Point) {
 	if point == nil {
 		log.Info("<tsdb> Empty data point")
 		return
 	}
-	log.Debugf("<tsdb> pID = %d. Writing measurement: %s into %s",pr.ID, point.Name(),rpName)
+	log.Debugf("<tsdb> pID = %d. Writing measurement: %s into %s", pr.ID, point.Name(), rpName)
 	pr.writeMutex.Lock()
 
-	bp,ok := pr.batchPoints[rpName]
+	bp, ok := pr.batchPoints[rpName]
 	if ok {
 		bp.AddPoint(point)
-	} else 	{
+	} else {
 		err := pr.InitBatchPoint(rpName)
 		if err != nil {
 			log.Error("<tsdb> Can't init batch points on Write operation . Error: ", err)
@@ -316,12 +324,10 @@ func (pr *Process) WriteDirect(rpName string ,point *influx.Point) {
 	}
 }
 
-
-
 // Configure should be used to replace new set of filters and selectors with new set .
 // Process should be restarted after Configure call
 func (pr *Process) Configure(procConfig ProcessConfig, doRestart bool) error {
-	log.Info("Configuring process. pID = ",procConfig.ID)
+	log.Info("Configuring process. pID = ", procConfig.ID)
 	*pr.Config = procConfig
 	if doRestart {
 		pr.Stop()
@@ -334,11 +340,11 @@ func (pr *Process) Configure(procConfig ProcessConfig, doRestart bool) error {
 func (pr *Process) InitBatchPoint(bpName string) error {
 	var err error
 	// Create a new point batch
-	log.Debugf("Init new batch point %s",bpName)
+	log.Debugf("Init new batch point %s", bpName)
 	pr.batchPoints[bpName], err = influx.NewBatchPoints(influx.BatchPointsConfig{
-				Database:        pr.Config.InfluxDB,
-				Precision:       "ns",
-				RetentionPolicy: bpName,
+		Database:        pr.Config.InfluxDB,
+		Precision:       "ns",
+		RetentionPolicy: bpName,
 	})
 
 	return err
@@ -356,37 +362,37 @@ func (pr *Process) writeIntoDb() error {
 		if len(pr.batchPoints[bpKey].Points()) == 0 {
 			continue
 		}
-		log.Debugf("<tsdb> Writing batch of size = %d , using retention policy = %s into db = %s , proc = %d", len(pr.batchPoints[bpKey].Points()), pr.batchPoints[bpKey].RetentionPolicy(), pr.batchPoints[bpKey].Database(),pr.ID)
+		log.Debugf("<tsdb> Writing batch of size = %d , using retention policy = %s into db = %s , proc = %d", len(pr.batchPoints[bpKey].Points()), pr.batchPoints[bpKey].RetentionPolicy(), pr.batchPoints[bpKey].Database(), pr.ID)
 		var err error
 
-		for i:=0; i<5 ; i++  {
+		for i := 0; i < 5; i++ {
 			err = pr.storage.WriteDataPoints(pr.batchPoints[bpKey])
 			if err == nil {
 				break
-			}else if strings.Contains(err.Error(),"field type conflict") {
+			} else if strings.Contains(err.Error(), "field type conflict") {
 				break
-			}else if strings.Contains(err.Error(),"unable to parse") || strings.Contains(err.Error(),"retention policy not found") {
+			} else if strings.Contains(err.Error(), "unable to parse") || strings.Contains(err.Error(), "retention policy not found") {
 				break
-			} else  {
-				log.Error("Retrying error after 5 sec. Err:",err.Error())
-				time.Sleep(time.Second*5)
+			} else {
+				log.Error("Retrying error after 5 sec. Err:", err.Error())
+				time.Sleep(time.Second * 5)
 			}
 		}
 
 		if err != nil {
-			if strings.Contains(err.Error(),"unable to parse") {
+			if strings.Contains(err.Error(), "unable to parse") {
 				log.Error("<tsdb> Batch Write error , unable to parse packet.Error: ", err)
-			}else if strings.Contains(err.Error(),"field type conflict") {
+			} else if strings.Contains(err.Error(), "field type conflict") {
 				log.Error("<tsdb> Field type conflict.Error: ", err)
-			}else if strings.Contains(err.Error(),"retention policy not found") {
+			} else if strings.Contains(err.Error(), "retention policy not found") {
 				log.Error("<tsdb> Retention policy not found.Error: ", err)
-			}  else  {
+			} else {
 				pr.State = "LOST_CONNECTION"
 				log.Error("<tsdb> Batch Write error , batch is dropped.Changing state to LOST_CONNECTION ", err)
 			}
 			err = pr.InitBatchPoint(bpKey)
 
-		}else {
+		} else {
 			if pr.State != "RUNNING" {
 				pr.State = "RUNNING"
 			}
@@ -397,7 +403,7 @@ func (pr *Process) writeIntoDb() error {
 
 		}
 
-		if len(pr.batchPoints[bpKey].Points()) >= (pr.Config.BatchMaxSize+2000) {
+		if len(pr.batchPoints[bpKey].Points()) >= (pr.Config.BatchMaxSize + 2000) {
 			log.Error("BATCH size is too big. Removing all records.")
 			// protection against infinite grows
 			err = pr.InitBatchPoint(bpKey)
@@ -444,7 +450,7 @@ func (pr *Process) Start() error {
 		pr.serviceMedataStore = metadata.NewVincMetadataStore(pr.mqttTransport)
 		pr.serviceMedataStore.Start()
 	}
-	if pr.State == "INITIALIZED"{
+	if pr.State == "INITIALIZED" {
 		pr.State = "RUNNING"
 	}
 	//pr.serviceMedataStore = metadata.NewTpMetadataStore(pr.mqttTransport)
@@ -472,8 +478,3 @@ func (pr *Process) Stop() error {
 	log.Info("<tsdb> Process stopped")
 	return nil
 }
-
-
-
-
-

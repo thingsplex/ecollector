@@ -277,7 +277,7 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 		name  , _ := val["name"]
 		duration  , _ := val["duration"]
 		proc := api.integr.GetProcessByID(procId)
-		proc.Storage().UpdateRetentionPolicy(name,duration)
+		proc.Storage().AddRetentionPolicy(name,duration)
 
 	case "cmd.tsdb.update_retention_policy":
 		// configure retentions

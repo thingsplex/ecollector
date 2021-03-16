@@ -1,5 +1,9 @@
 package metadata
 
+const (
+	DeviceTypeMainMeter = "meter.main_elec"
+)
+
 type ServiceMetaRec struct {
 	Address    string
 	DeviceID   int

@@ -95,3 +95,21 @@ func TestDataPointAggregator_calculateDifference(t *testing.T) {
 		t.Error("Error 3 , result = ",r5)
 	}
 }
+
+func TestDataPointAggregator_adjustTime(t *testing.T) {
+	tm := time.Now()
+    t.Log(tm)
+	tm2 := adjustTimeByOneHour(tm)
+	t.Log(tm2)
+
+}
+
+func TestDataPointAggregator_findOutliers(t *testing.T) {
+
+	series := []float64{100,120,130,400,140,150}
+	r , err := findOutliers(series)
+	t.Log(r.Extreme)
+	t.Log(r.Mild)
+	t.Log(err)
+
+}

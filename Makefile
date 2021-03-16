@@ -1,8 +1,9 @@
-version="0.6.1"
+version="0.6.5"
 version_file=VERSION
 working_dir=$(shell pwd)
 arch="armhf"
 remote_host = "fh@cube.local"
+reprepo_host = ""
 
 clean:
 	-rm ecollector
@@ -11,10 +12,10 @@ build-go:
 	cd ./src;go build -o ecollector service.go;cd ../
 
 build-go-arm:
-	cd ./src;GOOS=linux GOARCH=arm GOARM=6 go build -ldflags="-s -w" -o ecollector service.go;cd ../
+	cd ./src;GOOS=linux GOARCH=arm GOARM=6 go build -ldflags="-s -w -X main.Version=${version}" -o ecollector service.go;cd ../
 
 build-go-amd:
-	cd ./src;GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o ecollector service.go;cd ../
+	cd ./src;GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${version}" -o ecollector service.go;cd ../
 
 
 configure-arm:
@@ -53,5 +54,7 @@ upload-install : upload
 remote-install : deb-arm upload
 	ssh -t $(remote_host) "sudo dpkg -i ecollector_$(version)_armhf.deb"
 
+publish-reprepo:
+	scp package/build/ecollector_$(version)_armhf.deb $(reprepo_host):~/apps
 
 .phony : clean

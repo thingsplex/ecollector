@@ -37,6 +37,8 @@ func SetupLog(logfile string, level string, logFormat string) {
 
 }
 
+var Version string
+
 func main() {
 	var workDir string
 	flag.StringVar(&workDir, "c", "", "Work dir")
@@ -65,7 +67,7 @@ func main() {
 		panic("Can't parse config file.")
 	}
 	SetupLog(configs.LogFile, configs.LogLevel, configs.LogFormat)
-	log.Info("--------------Starting ECollector-----------------")
+	log.Infof("--------------Starting ECollector v.%s -----------------",Version)
 
 	integr := tsdb.Boot(configs)
 
