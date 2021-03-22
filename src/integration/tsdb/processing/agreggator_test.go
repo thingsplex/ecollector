@@ -107,6 +107,7 @@ func TestDataPointAggregator_adjustTime(t *testing.T) {
 func TestDataPointAggregator_findOutliers(t *testing.T) {
 
 	series := []float64{100,120,130,400,140,150}
+	//series := []float64{100,120000,300,100}
 	r , err := findOutliers(series)
 	t.Log(r.Extreme)
 	t.Log(r.Mild)

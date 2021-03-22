@@ -190,9 +190,10 @@ func (dpa *DataPointAggregator) calculateAndPublishAccumulatedAggregates() {
 	var result float64
 	for _, v := range dpa.series {
 		result = 0
-		if len(v.values) == 0 {
+		if len(v.values) == 0 || v.dataPointMeta.AggregationFunc != AggregationFuncDifference{
 			continue
 		}
+
 		// Irregular reporting can accumulate too much data over multiple hours. For instance HAN meter was offline for very long time.
 		if v.TimeSinceLastUpdate() > 120*time.Minute {
 			log.Debug("<aggr> Previous value is too old.")
@@ -218,10 +219,15 @@ func (dpa *DataPointAggregator) calculateAndPublishAccumulatedAggregates() {
 			continue
 		}
 
-		if v.dataPointMeta.Value == result {
-			// Publishing only value that have changed
-			log.Trace("<aggr> Datapoint didn't change , value skipped. val = ", result)
-			continue
+		if v.dataPointMeta.Profile.HourlyAccumulatedValue {
+			if result == 0 {
+				continue // Skipping 0 values
+			}
+		}else {
+			if v.dataPointMeta.Value == result || result ==0 {
+				log.Debug("<aggr> Datapoint didn't change , value skipped. val = ", result)
+				continue // Skipping values that haven't changed or 0 values
+			}
 		}
 
 		v.dataPointMeta.Value = result
