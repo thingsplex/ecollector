@@ -1,0 +1,188 @@
+[
+  {
+    "ID": 1,
+    "Name": "default",
+    "MqttBrokerAddr": "tcp://cube.local:1884",
+    "MqttClientID": "eclr_1363992080",
+    "MqttBrokerUsername": "",
+    "MqttBrokerPassword": "",
+    "InfluxAddr": "http://localhost:8086",
+    "InfluxUsername": "",
+    "InfluxPassword": "",
+    "InfluxDB": "historian",
+    "BatchMaxSize": 1000,
+    "SaveInterval": 5000,
+    "Filters": [
+      {
+        "ID": 1,
+        "Name": "exclude_vinculum_notify",
+        "Topic": "",
+        "Domain": "",
+        "Service": "",
+        "MsgType": "evt.pd7.notify",
+        "Negation": true,
+        "LinkedFilterBooleanOperation": "",
+        "LinkedFilterID": 0,
+        "IsAtomic": true,
+        "Tags": null,
+        "MeasurementID": "",
+        "InMemory": false
+      },
+      {
+        "ID": 2,
+        "Name": "exclude_vinculum_request",
+        "Topic": "",
+        "Domain": "",
+        "Service": "",
+        "MsgType": "cmd.pd7.request",
+        "Negation": true,
+        "LinkedFilterBooleanOperation": "",
+        "LinkedFilterID": 0,
+        "IsAtomic": true,
+        "Tags": null,
+        "MeasurementID": "",
+        "InMemory": false
+      },
+      {
+        "ID": 3,
+        "Name": "exclude_vinculum_response",
+        "Topic": "",
+        "Domain": "",
+        "Service": "",
+        "MsgType": "evt.pd7.response",
+        "Negation": true,
+        "LinkedFilterBooleanOperation": "",
+        "LinkedFilterID": 0,
+        "IsAtomic": true,
+        "Tags": null,
+        "MeasurementID": "",
+        "InMemory": false
+      },
+      {
+        "ID": 4,
+        "Name": "allow all",
+        "Topic": "",
+        "Domain": "",
+        "Service": "",
+        "MsgType": "",
+        "Negation": false,
+        "LinkedFilterBooleanOperation": "",
+        "LinkedFilterID": 0,
+        "IsAtomic": true,
+        "Tags": null,
+        "MeasurementID": "",
+        "InMemory": false
+      }
+    ],
+    "Selectors": [
+      {
+        "ID": 1,
+        "Topic": "pt:j1/mt:evt/rt:dev/#",
+        "InMemory": false
+      },
+      {
+        "ID": 2,
+        "Topic": "pt:j1/mt:cmd/rt:dev/#",
+        "InMemory": false
+      }
+    ],
+    "Autostart": false,
+    "InitDb": true,
+    "SiteId": "",
+    "Profile": "optimized"
+  },
+  {
+    "ID": 2,
+    "Name": "default_csv",
+    "MqttBrokerAddr": "tcp://cube.local:1884",
+    "MqttClientID": "eclr_1363992080_csv",
+    "MqttBrokerUsername": "",
+    "MqttBrokerPassword": "",
+    "InfluxAddr": "",
+    "InfluxUsername": "",
+    "InfluxPassword": "",
+    "InfluxDB": "",
+    "BatchMaxSize": 1000,
+    "SaveInterval": 5000,
+    "Filters": [
+      {
+        "ID": 1,
+        "Name": "exclude_vinculum_notify",
+        "Topic": "",
+        "Domain": "",
+        "Service": "",
+        "MsgType": "evt.pd7.notify",
+        "Negation": true,
+        "LinkedFilterBooleanOperation": "",
+        "LinkedFilterID": 0,
+        "IsAtomic": true,
+        "Tags": null,
+        "MeasurementID": "",
+        "InMemory": false
+      },
+      {
+        "ID": 2,
+        "Name": "exclude_vinculum_request",
+        "Topic": "",
+        "Domain": "",
+        "Service": "",
+        "MsgType": "cmd.pd7.request",
+        "Negation": true,
+        "LinkedFilterBooleanOperation": "",
+        "LinkedFilterID": 0,
+        "IsAtomic": true,
+        "Tags": null,
+        "MeasurementID": "",
+        "InMemory": false
+      },
+      {
+        "ID": 3,
+        "Name": "exclude_vinculum_response",
+        "Topic": "",
+        "Domain": "",
+        "Service": "",
+        "MsgType": "evt.pd7.response",
+        "Negation": true,
+        "LinkedFilterBooleanOperation": "",
+        "LinkedFilterID": 0,
+        "IsAtomic": true,
+        "Tags": null,
+        "MeasurementID": "",
+        "InMemory": false
+      },
+      {
+        "ID": 4,
+        "Name": "allow all",
+        "Topic": "",
+        "Domain": "",
+        "Service": "",
+        "MsgType": "",
+        "Negation": false,
+        "LinkedFilterBooleanOperation": "",
+        "LinkedFilterID": 0,
+        "IsAtomic": true,
+        "Tags": null,
+        "MeasurementID": "",
+        "InMemory": false
+      }
+    ],
+    "Selectors": [
+      {
+        "ID": 1,
+        "Topic": "pt:j1/mt:evt/rt:dev/#",
+        "InMemory": false
+      },
+      {
+        "ID": 2,
+        "Topic": "pt:j1/mt:cmd/rt:dev/#",
+        "InMemory": false
+      }
+    ],
+    "StoragePath": "./",
+    "StorageType": "csv",
+    "Autostart": true,
+    "InitDb": true,
+    "SiteId": "",
+    "Profile": "optimized"
+  }
+]

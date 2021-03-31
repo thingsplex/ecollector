@@ -8,6 +8,14 @@ import (
 	"time"
 )
 
+const (
+	StorageTypeInfluxdb = "influxdb"
+	StorageTypeCsv      = "csv"
+
+	ProfileSimple    = "simple"
+	ProfileOptimized = "optimized"
+	ProfileRaw       = "raw"
+)
 
 // Transform defines function which converts IotMsg into influx data point
 type Transform func(context *MsgContext, topic string, addr *fimpgo.Address, iotMsg *fimpgo.FimpMessage, domain string) ([]*DataPoint, error)
@@ -24,10 +32,10 @@ type MsgContext struct {
 }
 
 type DataPoint struct {
-	MeasurementName string
-	SeriesID        string
-	Point           *influx.Point
-	AggregationFunc byte
+	MeasurementName  string
+	SeriesID         string
+	Point            *influx.Point
+	AggregationFunc  byte
 	AggregationValue interface{}
 }
 
@@ -84,7 +92,9 @@ type ProcessConfig struct {
 	Autostart    bool
 	InitDb       bool
 	SiteId       string
-	Profile      string // simple , optimized
+	Profile      string // simple , optimized , raw
+	StoragePath  string
+	StorageType  string // influxdb,csv,parquet
 }
 
 //ProcessConfigs is a collection of ProcessConfigs

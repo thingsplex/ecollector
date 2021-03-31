@@ -14,10 +14,13 @@ type  InfluxV1Storage struct {
 
 type DataPointsFilter struct {
 	Tags              map[string]string      `json:"tags"`
+	Devices 		  []string               `json:"devices"`
+	Locations         []string               `json:"locations"`
+	DevTypes          []string               `json:"dev_types"`
 }
 
 
-func NewInfluxV1Storage(address,username,password,dbName string) (*InfluxV1Storage,error) {
+func NewInfluxV1Storage(address,username,password,dbName string) (DataStorage,error) {
 	var err error
 	ic := &InfluxV1Storage{dbName: dbName}
 	ic.influxC, err = influx.NewHTTPClient(influx.HTTPConfig{
@@ -136,6 +139,16 @@ func (pr *InfluxV1Storage) GetDataPoints(fieldName,measurement,relativeTime,from
 	for k,v := range filter.Tags {
 		filterStr = fmt.Sprintf("%s AND %s = '%s'",filterStr,k,v)
 	}
+	for v := range filter.Devices {
+		filterStr = fmt.Sprintf("%s AND dev_id = '%s'",filterStr,v)
+	}
+	for v := range filter.Locations{
+		filterStr = fmt.Sprintf("%s AND location_id = '%s'",filterStr,v)
+	}
+	for v := range filter.DevTypes{
+		filterStr = fmt.Sprintf("%s AND dev_type = '%s'",filterStr,v)
+	}
+
 
 	selector := ""
 	if groupByTime == "" && groupByTag !="" {

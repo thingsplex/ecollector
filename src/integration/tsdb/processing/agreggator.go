@@ -196,6 +196,7 @@ func (dpa *DataPointAggregator) calculateAndPublishAccumulatedAggregates() {
 
 		// Irregular reporting can accumulate too much data over multiple hours. For instance HAN meter was offline for very long time.
 		if v.TimeSinceLastUpdate() > 120*time.Minute {
+			// TODO : calculate average since last update instead of drooping measurements.
 			log.Debug("<aggr> Previous value is too old.")
 			v.values = v.values[:0] // empty slice
 			continue
@@ -215,7 +216,7 @@ func (dpa *DataPointAggregator) calculateAndPublishAccumulatedAggregates() {
 
 		// TODO: filtering and protection against anomalies must be moved to another place
 		if result > 100 { // 100kWh is unrealistic value , can be result of un-regular reports
-			log.Debug("<aggr> Value is too high , ignored.")
+			log.Info("<aggr> Value is too high , ignored.Value = ",result)
 			continue
 		}
 
@@ -252,7 +253,7 @@ func (dpa *DataPointAggregator) calculateDifference(values []float64) float64 {
 			if values[i+1] >= values[i] {
 				result += values[i+1] - values[i]
 			} else {
-				log.Info("<aggr> Meter reset detected ", values[i+1])
+				log.Infof("<aggr> Meter reset detected. old = %f , new = %f ",values[i], values[i+1])
 			}
 		}
 
@@ -282,7 +283,7 @@ func filterSeries(values []float64) []float64 {
 
 	for i := range values {
 		if values[i] == 0  || isOutlier(values[i]){  // removing all 0 and outliers
-			log.Debug("<aggr> Filtering out outlier val = ",values[i])
+			log.Info("<aggr> Filtering out outlier val = ",values[i])
 			continue
 		} else {
 			result = append(result,values[i])

@@ -20,7 +20,7 @@ type Process struct {
 	ID                 IDt
 	mqttTransport      *fimpgo.MqttTransport
 	Config             *ProcessConfig
-	storage            *storage.InfluxV1Storage
+	storage            storage.DataStorage
 	batchPoints        map[string]influx.BatchPoints
 	ticker             *time.Ticker
 	writeMutex         *sync.Mutex
@@ -36,7 +36,7 @@ func (pr *Process) ServiceMedataStore() metadata.MetadataStore {
 	return pr.serviceMedataStore
 }
 
-func (pr *Process) Storage() *storage.InfluxV1Storage {
+func (pr *Process) Storage() storage.DataStorage {
 	return pr.storage
 }
 
@@ -59,9 +59,14 @@ func (pr *Process) SetServiceMedataStore(serviceMedataStore metadata.MetadataSto
 func (pr *Process) Init() error {
 	var err error
 	pr.State = "INIT_FAILED"
-	log.Info("<tsdb>Initializing influx client.")
+	if pr.Config.StorageType == "" || pr.Config.StorageType == StorageTypeInfluxdb {
+		log.Info("<tsdb> Configuring influxDB data store")
+		pr.storage, err = storage.NewInfluxV1Storage(pr.Config.InfluxAddr, pr.Config.InfluxUsername, pr.Config.InfluxPassword, pr.Config.InfluxDB)
+	}else if pr.Config.StorageType == StorageTypeCsv {
+		log.Info("<tsdb> Configuring CSV data store")
+		pr.storage,err = storage.NewCsvStorage(pr.Config.StoragePath)
+	}
 
-	pr.storage, err = storage.NewInfluxV1Storage(pr.Config.InfluxAddr, pr.Config.InfluxUsername, pr.Config.InfluxPassword, pr.Config.InfluxDB)
 
 	if err != nil {
 		return err
@@ -139,7 +144,7 @@ func (pr *Process) OnMessage(topic string, addr *fimpgo.Address, iotMsg *fimpgo.
 		} else {
 			if points != nil {
 				for i := range points {
-					if storage.IsHighFrequencyData(points[i].MeasurementName) {
+					if storage.IsHighFrequencyData(points[i].MeasurementName) && pr.Config.Profile != ProfileRaw {
 						// writing into aggregation store
 						fields, _ := points[i].Point.Fields()
 						// setting device profile

@@ -14,9 +14,11 @@ build-go:
 build-go-arm:
 	cd ./src;GOOS=linux GOARCH=arm GOARM=6 go build -ldflags="-s -w -X main.Version=${version}" -o ecollector service.go;cd ../
 
-build-go-amd:
+build-go-linux-amd64:
 	cd ./src;GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${version}" -o ecollector service.go;cd ../
 
+build-go-mac-amd64:
+	cd ./src;GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${version}" -o ecollector service.go;cd ../
 
 configure-arm:
 	python ./scripts/config_env.py prod $(version) armhf
@@ -26,7 +28,8 @@ configure-amd64:
 
 
 package-tar:
-	tar cvzf ecollector_$(version).tar.gz ecollector VERSION
+	cp ./src/ecollector package/tar/
+	tar cvzf ecollector_$(version).tar.gz package/tar
 
 package-deb-doc-tp:
 	@echo "Packaging application as Thingsplex debian package"
@@ -41,6 +44,9 @@ deb-arm : clean configure-arm build-go-arm package-deb-doc-tp
 
 deb-amd : configure-amd64 build-go-amd package-deb-doc-tp
 	mv debian.deb ecollector_$(version)_amd64.deb
+
+tar-mac-amd64: clean build-go-mac-amd64 package-tar
+	@echo "MAC-amd64 application was packaged into tar archive "
 
 run :
 	cd ./src; go run service.go -c testdata/config.json;cd ../
