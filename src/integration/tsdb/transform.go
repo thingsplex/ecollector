@@ -75,7 +75,7 @@ func DefaultTransform(context *MsgContext, topic string, addr *fimpgo.Address, i
 					}
 
 				} else {
-					return nil, fmt.Errorf("unknown unit")
+					return nil, fmt.Errorf("unknown unit: %s ",unit)
 				}
 				context.measurementName = mName
 				valueType = "_skip_"

@@ -122,8 +122,9 @@ func (pr *Process) OnMessage(topic string, addr *fimpgo.Address, iotMsg *fimpgo.
 		if r := recover(); r != nil {
 			log.Error("---PANIC----")
 			log.Errorf("OnMessage Err:%v", r)
+			trace := debug.Stack()
+			log.Errorf("%s",string(trace))
 			debug.PrintStack()
-
 		}
 	}()
 	context := &MsgContext{time: time.Now()}
@@ -140,7 +141,7 @@ func (pr *Process) OnMessage(topic string, addr *fimpgo.Address, iotMsg *fimpgo.
 		}
 		points, err := pr.transform(context, topic, addr, iotMsg, addr.GlobalPrefix)
 		if err != nil {
-			log.Errorf("<tsdb> Transformation error: %s", err)
+			log.Debugf("<tsdb> Transformation error: %s", err)
 		} else {
 			if points != nil {
 				for i := range points {

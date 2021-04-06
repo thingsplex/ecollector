@@ -4,6 +4,7 @@ import (
 	"github.com/montanaflynn/stats"
 	log "github.com/sirupsen/logrus"
 	"math"
+	"runtime/debug"
 	"sync"
 	"time"
 )
@@ -94,6 +95,15 @@ func NewDataPointAggregator(aggregationInterval time.Duration, samplingInterval 
 //startInputStreamProcessor starts stream processor . The processor consumes messages from input channel into internal buffer/vector with values . Later values are used to calculate aggregates
 func (dpa *DataPointAggregator) startInputStreamProcessor() {
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Error("<aggr> Panic in InputStreamProcessor function ")
+				log.Errorf("Err:%v", r)
+				trace := debug.Stack()
+				log.Errorf("%s",string(trace))
+			}
+		}()
+
 		for m := range dpa.inputChannel {
 			dpa.mux.Lock()
 			ser, exist := dpa.series[m.SeriesID]
@@ -141,6 +151,14 @@ func (dpa *DataPointAggregator) AddDataPoint(dp DataPoint) {
 // for accumulating measurements the process samples data on regular interval and saves into separate table , for instance
 // for energy calculations
 func (dpa *DataPointAggregator) calculateAndPublishAggregates() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Error("<aggr> Panic in calculateAndPublishAggregates function ")
+			log.Errorf("Err:%v", r)
+			trace := debug.Stack()
+			log.Errorf("%s",string(trace))
+		}
+	}()
 	dpa.mux.Lock()
 	defer dpa.mux.Unlock()
 	var result float64
@@ -185,6 +203,14 @@ func (dpa *DataPointAggregator) calculateAndPublishAggregates() {
 }
 
 func (dpa *DataPointAggregator) calculateAndPublishAccumulatedAggregates() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Error("<aggr> Panic in calculateAndPublishAccumulatedAggregates function ")
+			log.Errorf("Err:%v", r)
+			trace := debug.Stack()
+			log.Errorf("%s",string(trace))
+		}
+	}()
 	dpa.mux.Lock()
 	defer dpa.mux.Unlock()
 	var result float64
@@ -208,10 +234,15 @@ func (dpa *DataPointAggregator) calculateAndPublishAccumulatedAggregates() {
 		} else {
 			v.dataPointMeta.Time = time.Now()
 			v.values = filterSeries(v.values)
+			if len(v.values) == 0 {
+				log.Debugf("<aggr> Empty series after filtering,for series = %s ", v.dataPointMeta.SeriesID)
+				continue
+			}
 		}
 
 		result = dpa.calculateDifference(v.values)
 		log.Debugf("<aggr> DIFF value = %f for series = %s from values %v", result, v.dataPointMeta.SeriesID, v.values)
+
 		v.values = v.values[len(v.values)-1:] // making last element as first element in next array
 
 		// TODO: filtering and protection against anomalies must be moved to another place

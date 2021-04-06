@@ -1,12 +1,12 @@
-version="0.6.5"
+version="0.7.0"
 version_file=VERSION
 working_dir=$(shell pwd)
 arch="armhf"
 remote_host = "fh@cube.local"
-reprepo_host = ""
+reprepo_host = "reprepro@archive.futurehome.no"
 
 clean:
-	-rm ecollector
+	-rm src/ecollector
 
 build-go:
 	cd ./src;go build -o ecollector service.go;cd ../
@@ -19,6 +19,9 @@ build-go-linux-amd64:
 
 build-go-mac-amd64:
 	cd ./src;GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${version}" -o ecollector service.go;cd ../
+
+build-go-win-amd64:
+	cd ./src;GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${version}" -o ecollector service.go;cd ../
 
 configure-arm:
 	python ./scripts/config_env.py prod $(version) armhf
@@ -42,10 +45,16 @@ package-deb-doc-tp:
 deb-arm : clean configure-arm build-go-arm package-deb-doc-tp
 	mv package/debian_tp.deb package/build/ecollector_$(version)_armhf.deb
 
-deb-amd : configure-amd64 build-go-amd package-deb-doc-tp
+deb-amd : configure-amd64 build-go-linux-amd64 package-deb-doc-tp
 	mv debian.deb ecollector_$(version)_amd64.deb
 
 tar-mac-amd64: clean build-go-mac-amd64 package-tar
+	@echo "MAC-amd64 application was packaged into tar archive "
+
+tar-win-amd64: clean build-go-win-amd64 package-tar
+	@echo "MAC-amd64 application was packaged into tar archive "
+
+tar-linux-amd64: clean build-go-linux-amd64 package-tar
 	@echo "MAC-amd64 application was packaged into tar archive "
 
 run :
