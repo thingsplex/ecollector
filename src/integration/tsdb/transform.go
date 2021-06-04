@@ -37,7 +37,7 @@ func DefaultTransform(context *MsgContext, topic string, addr *fimpgo.Address, i
 	fields["src"] = iotMsg.Source // src can change as several services can generate commands as result the field can't be stored as tag
 	valueType := iotMsg.ValueType
 	switch iotMsg.Service {
-	case "meter_elec", "sensor_power":
+	case "meter_elec", "sensor_power","chargepoint":
 		var mName string
 		tags["service"] = iotMsg.Service
 		if iotMsg.Type == "evt.meter.report" || iotMsg.Type == "evt.sensor.report" {
@@ -78,6 +78,31 @@ func DefaultTransform(context *MsgContext, topic string, addr *fimpgo.Address, i
 					return nil, fmt.Errorf("unknown unit: %s ",unit)
 				}
 				context.measurementName = mName
+				valueType = "_skip_"
+
+			} else {
+				return nil, err
+			}
+
+		} else if iotMsg.Type == "evt.current_session.report" {
+			val, err := iotMsg.GetFloatValue()
+			if err == nil {
+				fields["value"] = val
+				fields["unit"] = "kWh"
+				tags["dir"] = DirectionImport
+
+				seriesID = fmt.Sprintf("%s;%s;import", MeasurementElecMeterEnergySampled, seriesID)
+
+				point2, err := influx.NewPoint(MeasurementElecMeterEnergySampled, tags, fields, context.time)
+				if err == nil {
+						points = append(points, &DataPoint{
+							MeasurementName:  MeasurementElecMeterEnergySampled,
+							AggregationValue: val,
+							AggregationFunc:  processing.AggregationFuncSum,
+							SeriesID:         seriesID,
+							Point:            point2,
+						})
+				}
 				valueType = "_skip_"
 
 			} else {

@@ -9,6 +9,15 @@ import (
 )
 
 const (
+
+    ProcStateInitFailed = "INIT_FAILED"
+    ProcStateLoaded = "LOADED"
+    ProcStateInitializedWithErrors = "INITIALIZED_WITH_ERRORS"
+    ProcStateStopped = "STOPPED"
+    ProcStateRunning = "RUNNING"
+    ProcStateStarting = "STARTING"
+    ProcStateInitialized = "INITIALIZED"
+
 	StorageTypeInfluxdb = "influxdb"
 	StorageTypeCsv      = "csv"
 

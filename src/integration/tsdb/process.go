@@ -2,12 +2,14 @@ package tsdb
 
 import (
 	"errors"
+	"fmt"
 	"github.com/futurehomeno/fimpgo"
 	influx "github.com/influxdata/influxdb1-client/v2"
 	log "github.com/sirupsen/logrus"
 	"github.com/thingsplex/ecollector/integration/tsdb/processing"
 	"github.com/thingsplex/ecollector/integration/tsdb/storage"
 	"github.com/thingsplex/ecollector/metadata"
+	"github.com/thingsplex/ecollector/utils"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -45,7 +47,7 @@ func NewProcess(config *ProcessConfig) *Process {
 	proc := Process{Config: config, transform: DefaultTransform}
 	proc.writeMutex = &sync.Mutex{}
 	proc.apiMutex = &sync.Mutex{}
-	proc.State = "LOADED"
+	proc.State = ProcStateLoaded
 	proc.ID = config.ID
 	proc.rawAggregator = processing.NewDataPointAggregator(30*time.Second, 10)
 	return &proc
@@ -58,7 +60,7 @@ func (pr *Process) SetServiceMedataStore(serviceMedataStore metadata.MetadataSto
 // Init - initializes the process - creates MQTT connection , initializes storage , initializes batch points
 func (pr *Process) Init() error {
 	var err error
-	pr.State = "INIT_FAILED"
+	pr.State = ProcStateStarting
 	if pr.Config.StorageType == "" || pr.Config.StorageType == StorageTypeInfluxdb {
 		log.Info("<tsdb> Configuring influxDB data store")
 		pr.storage, err = storage.NewInfluxV1Storage(pr.Config.InfluxAddr, pr.Config.InfluxUsername, pr.Config.InfluxPassword, pr.Config.InfluxDB)
@@ -67,8 +69,8 @@ func (pr *Process) Init() error {
 		pr.storage,err = storage.NewCsvStorage(pr.Config.StoragePath)
 	}
 
-
 	if err != nil {
+		pr.State = ProcStateInitFailed
 		return err
 	}
 
@@ -77,11 +79,11 @@ func (pr *Process) Init() error {
 		log.Info("<tsdb> Setting up database")
 		if err = pr.storage.InitDB(pr.Config.InfluxDB); err != nil {
 			pr.LastError = "InfluxDB is not reachable .Check connection parameters."
-			pr.State = "INITIALIZED_WITH_ERRORS"
+			pr.State = ProcStateInitializedWithErrors
 		}
 		// Setting up retention policies
 		log.Info("Setting up retention policies")
-		if pr.Config.Profile == "optimized" {
+		if pr.Config.Profile == ProfileOptimized {
 			pr.storage.InitDefaultBuckets()
 		} else {
 			pr.storage.InitSimpleBuckets()
@@ -103,12 +105,12 @@ func (pr *Process) Init() error {
 	log.Info("<tsdb> DB initialization completed.")
 	log.Info("<tsdb> Initializing MQTT adapter.")
 	//"tcp://localhost:1883", "blackflowint", "", ""
-
-	pr.mqttTransport = fimpgo.NewMqttTransport(pr.Config.MqttBrokerAddr, pr.Config.MqttClientID, pr.Config.MqttBrokerUsername, pr.Config.MqttBrokerPassword, true, 1, 1)
+	mqttClientId := fmt.Sprintf("ec_proc_%d", utils.GenerateRandomNumber())
+	pr.mqttTransport = fimpgo.NewMqttTransport(pr.Config.MqttBrokerAddr, mqttClientId, pr.Config.MqttBrokerUsername, pr.Config.MqttBrokerPassword, true, 1, 1)
 	pr.mqttTransport.SetMessageHandler(pr.OnMessage)
 	log.Info("<tsdb> MQTT adapter initialization completed.")
-	if pr.State == "INIT_FAILED" {
-		pr.State = "INITIALIZED"
+	if pr.State == ProcStateStarting {
+		pr.State = ProcStateInitialized
 	}
 	pr.StartAggregatorWorker()
 	log.Info("<tsdb> the process init state =", pr.State)
@@ -145,6 +147,7 @@ func (pr *Process) OnMessage(topic string, addr *fimpgo.Address, iotMsg *fimpgo.
 		} else {
 			if points != nil {
 				for i := range points {
+					//log.Debugf("Measurement name = ",points[i].MeasurementName)
 					if storage.IsHighFrequencyData(points[i].MeasurementName) && pr.Config.Profile != ProfileRaw {
 						// writing into aggregation store
 						fields, _ := points[i].Point.Fields()
@@ -399,8 +402,8 @@ func (pr *Process) writeIntoDb() error {
 			err = pr.InitBatchPoint(bpKey)
 
 		} else {
-			if pr.State != "RUNNING" {
-				pr.State = "RUNNING"
+			if pr.State != ProcStateRunning {
+				pr.State = ProcStateRunning
 			}
 			err = pr.InitBatchPoint(bpKey)
 			if err != nil {
@@ -426,7 +429,11 @@ func (pr *Process) writeIntoDb() error {
 func (pr *Process) Start() error {
 	log.Info("<tsdb> Starting process...")
 	// try to initialize process first if current state is not INITIALIZED
-	if pr.State == "INIT_FAILED" || pr.State == "LOADED" || pr.State == "INITIALIZED_WITH_ERRORS" || pr.State == "STOPPED" {
+	if pr.State == ProcStateRunning || pr.State == ProcStateStarting {
+		log.Info("<tsdb> Process already running or starting ")
+		return nil
+	}
+	if pr.State == ProcStateInitFailed || pr.State == ProcStateLoaded || pr.State == ProcStateInitializedWithErrors || pr.State == ProcStateStopped {
 		if err := pr.Init(); err != nil {
 			return err
 		}
@@ -456,8 +463,8 @@ func (pr *Process) Start() error {
 		pr.serviceMedataStore = metadata.NewVincMetadataStore(pr.mqttTransport)
 		pr.serviceMedataStore.Start()
 	}
-	if pr.State == "INITIALIZED" {
-		pr.State = "RUNNING"
+	if pr.State == ProcStateInitialized {
+		pr.State = ProcStateRunning
 	}
 	//pr.serviceMedataStore = metadata.NewTpMetadataStore(pr.mqttTransport)
 	//pr.serviceMedataStore.LoadFromTpRegistry()
@@ -470,7 +477,7 @@ func (pr *Process) Start() error {
 // Stop stops the process by unsubscribing from all topics ,
 // stops scheduler and stops adapter.
 func (pr *Process) Stop() error {
-	if pr.State != "RUNNING" {
+	if pr.State != ProcStateRunning {
 		return errors.New("process isn't running, nothing to stop")
 	}
 	log.Info("<tsdb> Stopping process...")

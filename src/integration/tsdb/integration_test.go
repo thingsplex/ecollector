@@ -105,7 +105,7 @@ func TestIntegration(t *testing.T) {
 		t.Error("Process Init failed .")
 	}
 
-	if integr.GetProcessByID(1).State != "RUNNING" {
+	if integr.GetProcessByID(1).State != ProcStateRunning {
 		t.Error("Process is not running")
 	}
 
@@ -115,10 +115,10 @@ func TestIntegration(t *testing.T) {
 		t.Error("Failed to add new process")
 	}
 
-	if integr.GetProcessByID(1).State != "RUNNING" {
+	if integr.GetProcessByID(1).State != ProcStateRunning{
 		t.Error("Process is not running")
 	}
-	if integr.GetProcessByID(2).State != "RUNNING" {
+	if integr.GetProcessByID(2).State != ProcStateRunning {
 		t.Error("Process is not running")
 	}
 	t.Log("Process was added")

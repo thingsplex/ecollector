@@ -15,6 +15,7 @@ const (
 	AggregationFuncMin        = 3
 	AggregationFuncMax        = 4
 	AggregationFuncDifference = 5
+	AggregationFuncSum        = 6
 )
 
 // DataPoint represents data point metadata
@@ -82,7 +83,7 @@ func NewDataPointAggregator(aggregationInterval time.Duration, samplingInterval 
 				if dpa.waitingNextInterval {
 					log.Debug("---------It's time to run difference calculation--------")
 					dpa.waitingNextInterval = false
-					dpa.calculateAndPublishAccumulatedAggregates()
+					dpa.calculateDifferenceInGrowingSeriesAndPublish()
 				}
 			} else {
 				dpa.waitingNextInterval = true
@@ -115,7 +116,7 @@ func (dpa *DataPointAggregator) startInputStreamProcessor() {
 			}
 			if exist {
 				switch ser.dataPointMeta.AggregationFunc {
-				case AggregationFuncMean, AggregationFuncMin, AggregationFuncMax, AggregationFuncDifference:
+				case AggregationFuncMean, AggregationFuncMin, AggregationFuncMax, AggregationFuncDifference,AggregationFuncSum:
 					ser.values = append(ser.values, val) // accumulating values
 				case AggregationFuncLast: // saving last value
 					if len(ser.values) == 0 && cap(ser.values) > 0 {
@@ -147,7 +148,7 @@ func (dpa *DataPointAggregator) AddDataPoint(dp DataPoint) {
 	dpa.inputChannel <- dp
 }
 
-//calculateAndPublishAggregates - calculates aggregates for all series and sends results over output channel
+// calculateAndPublishAggregates - calculates aggregates for all series and sends results over output channel
 // for accumulating measurements the process samples data on regular interval and saves into separate table , for instance
 // for energy calculations
 func (dpa *DataPointAggregator) calculateAndPublishAggregates() {
@@ -174,8 +175,13 @@ func (dpa *DataPointAggregator) calculateAndPublishAggregates() {
 			log.Debugf("<aggr> Mean value = %f for series = %s from values %v", result, v.dataPointMeta.SeriesID, v.values)
 		case AggregationFuncMin:
 			result, err = stats.Min(v.values)
+			log.Debugf("<aggr> MIN value = %f for series = %s from values %v", result, v.dataPointMeta.SeriesID, v.values)
 		case AggregationFuncMax:
 			result, err = stats.Max(v.values)
+			log.Debugf("<aggr> MAX value = %f for series = %s from values %v", result, v.dataPointMeta.SeriesID, v.values)
+		case AggregationFuncSum:
+			result, err = stats.Sum(v.values)
+			log.Debugf("<aggr> SUM value = %f for series = %s from values %v", result, v.dataPointMeta.SeriesID, v.values)
 		case AggregationFuncLast:
 			result = v.values[0]
 			log.Debugf("<aggr> LAST value = %f for series = %s from values %v", result, v.dataPointMeta.SeriesID, v.values)
@@ -198,14 +204,16 @@ func (dpa *DataPointAggregator) calculateAndPublishAggregates() {
 
 		v.dataPointMeta.Value = result
 		v.dataPointMeta.Fields["value"] = result
+
 		dpa.outputChannel <- v.dataPointMeta
 	}
 }
-
-func (dpa *DataPointAggregator) calculateAndPublishAccumulatedAggregates() {
+// calculateDifferenceInGrowingSeriesAndPublish - calculates difference in series of data points that is always growing. Such series is also filtered and time is
+// shifted for datapoint where value is changed once an hour , like HAN energy meters.
+func (dpa *DataPointAggregator) calculateDifferenceInGrowingSeriesAndPublish() {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Error("<aggr> Panic in calculateAndPublishAccumulatedAggregates function ")
+			log.Error("<aggr> Panic in calculateDifferenceInGrowingSeriesAndPublish function ")
 			log.Errorf("Err:%v", r)
 			trace := debug.Stack()
 			log.Errorf("%s",string(trace))
@@ -314,7 +322,7 @@ func filterSeries(values []float64) []float64 {
 
 	for i := range values {
 		if values[i] == 0  || isOutlier(values[i]){  // removing all 0 and outliers
-			log.Info("<aggr> Filtering out outlier val = ",values[i])
+			log.Debug("<aggr> Filtering out outlier val = ",values[i])
 			continue
 		} else {
 			result = append(result,values[i])

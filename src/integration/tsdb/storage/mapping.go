@@ -25,7 +25,7 @@ func ResolveRetentionName(fromTime,toTime string) (string,error) {
 	timeSinceNow:= time.Now().Sub(from)
 	return ResolveRetentionByElapsedTimeDuration(timeSinceNow),nil
 }
-// Converts duration into retention policy .
+// ResolveRetentionByElapsedTimeDuration converts duration into retention policy. Used for query operations.
 func ResolveRetentionByElapsedTimeDuration(timeSinceNow time.Duration) string {
 	switch  {
 	case timeSinceNow > 12*MonthDuration:
@@ -41,6 +41,7 @@ func ResolveRetentionByElapsedTimeDuration(timeSinceNow time.Duration) string {
 	}
 }
 
+// ResolveFieldFullName converts field name into field name withing retention policy.These unusual field names are result of Influx down sampling function.
 func ResolveFieldFullName(name,retentionPolicyName string) string  {
 	switch retentionPolicyName {
 	case "gen_day":
@@ -96,7 +97,7 @@ func ResolveRetentionByTimeGroup(timeGroup string) string {
 	}
 }
 
-// Relative time must be in format Xh,Xd,Xw
+// ResolveDurationFromRelativeTime Relative time must be in format Xh,Xd,Xw
 func ResolveDurationFromRelativeTime(rTime string) time.Duration {
 	var d int
 	if strings.Contains(rTime, "h") {
@@ -136,6 +137,7 @@ func CalculateDuration(fromTime,toTime string) (time.Duration,error) {
 	return from.Sub(to),nil
 }
 
+// ResolveWriteRetentionPolicyName converts measurement into retention policy
 func ResolveWriteRetentionPolicyName(mName string ) string {
 	if mName == "electricity_meter_energy_sampled" {
 		return "gen_year"

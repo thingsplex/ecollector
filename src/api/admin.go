@@ -1,12 +1,16 @@
 package api
 
 import (
+	"fmt"
 	"github.com/futurehomeno/fimpgo"
 	influx "github.com/influxdata/influxdb1-client/v2"
 	log "github.com/sirupsen/logrus"
 	"github.com/thingsplex/ecollector/integration/tsdb"
+	"github.com/thingsplex/ecollector/integration/tsdb/storage"
 	"github.com/thingsplex/ecollector/model"
+	"github.com/thingsplex/ecollector/utils"
 	"os"
+	"runtime/debug"
 	"strconv"
 	"time"
 )
@@ -23,7 +27,8 @@ func NewAdminApi(integr *tsdb.Integration,configs *model.Configs) *AdminApi {
 }
 
 func(api *AdminApi) Start() {
-	api.mqt = fimpgo.NewMqttTransport(api.configs.MqttServerURI,api.configs.MqttClientIdPrefix,api.configs.MqttUsername,api.configs.MqttPassword,true,1,1)
+	mqttClientId := fmt.Sprintf("ec_api_%d", utils.GenerateRandomNumber())
+	api.mqt = fimpgo.NewMqttTransport(api.configs.MqttServerURI,mqttClientId,api.configs.MqttUsername,api.configs.MqttPassword,true,1,1)
 	err := api.mqt.Start()
 	if err != nil {
 		log.Error("Can't connect AdminAPI to broker. Error:", err.Error())
@@ -48,7 +53,18 @@ func(api *AdminApi) getProcID(val map[string]string) tsdb.IDt {
 	return -1
 }
 
+func(api *AdminApi) getStorageByProcId() {
+
+}
+
 func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo.FimpMessage,rawMessage []byte){
+	defer func() {
+		if r := recover(); r != nil {
+			log.Error("---API PANIC----")
+			trace := debug.Stack()
+			log.Errorf("%s",string(trace))
+		}
+	}()
 	if iotMsg.Service != "ecollector" {
 		return
 	}
@@ -108,21 +124,28 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 		op  , _ := val["operation"]
 		status := "error"
 		procId := api.getProcID(val)
+		errStr := ""
 		if  procId>0 && op != "" {
 				proc := api.integr.GetProcessByID(procId)
-				switch op {
-				case "start":
-					err = proc.Start()
-				case "stop":
-					err = proc.Stop()
-				case "delete":
-					err = api.integr.RemoveProcess(procId)
+				if proc != nil {
+					switch op {
+					case "start":
+						err = proc.Start()
+					case "stop":
+						err = proc.Stop()
+					case "delete":
+						err = api.integr.RemoveProcess(procId)
+					}
+					if err == nil {
+						status = "ok"
+					}
+				}else {
+					status = "error"
+					errStr = "unknown process id"
 				}
-				if err == nil {
-					status = "ok"
-				}
+
 		}
-		errStr := ""
+
 		if err != nil {
 			errStr = err.Error()
 		}
@@ -146,8 +169,12 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 			return
 		}
 		query  , _ := val["query"]
-		proc := api.integr.GetProcessByID(procId)
-		response,err := proc.Storage().RunQuery(query)
+		_, storage, err := api.getProcAndStorageByProcId(procId)
+		if err != nil {
+			return
+		}
+
+		response,err := storage.RunQuery(query)
 		if err != nil {
 			log.Error("<api> Error while querying data . Err:",err.Error())
 		}
@@ -194,13 +221,12 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 		}
 		// fieldName,measurement,relativeTime,fromTime,toTime,groupByTime,fillType, dataFunction,groupByField
 
-		proc := api.integr.GetProcessByID(req.ProcID)
-		if proc == nil {
-			log.Error(" Can't fine process with ID = ",req.ProcID)
+		_, storage, err := api.getProcAndStorageByProcId(req.ProcID)
+		if err != nil {
 			return
 		}
 
-		response := proc.Storage().GetDataPoints(req.FieldName,req.MeasurementName,req.RelativeTime,req.FromTime,req.ToTime,req.GroupByTime,req.FillType,req.DataFunction,req.TransformFunction,req.GroupByTag,req.Filters)
+		response := storage.GetDataPoints(req.FieldName,req.MeasurementName,req.RelativeTime,req.FromTime,req.ToTime,req.GroupByTime,req.FillType,req.DataFunction,req.TransformFunction,req.GroupByTag,req.Filters)
 		msg = fimpgo.NewMessage("evt.tsdb.data_points_report", "ecollector", fimpgo.VTypeObject, response, nil, nil,iotMsg)
 
 	case "cmd.tsdb.get_energy_data_points":
@@ -217,12 +243,11 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 		}
 		// fieldName,measurement,relativeTime,fromTime,toTime,groupByTime,fillType, dataFunction,groupByField
 
-		proc := api.integr.GetProcessByID(req.ProcID)
-		if proc == nil {
-			log.Error(" Can't fine process with ID = ",req.ProcID)
+		_, storage, err := api.getProcAndStorageByProcId(req.ProcID)
+		if err != nil {
 			return
 		}
-		response := proc.Storage().GetEnergyDataPoints(req.RelativeTime,req.FromTime,req.ToTime,req.GroupByTag,req.GroupByTag,req.Filters)
+		response := storage.GetEnergyDataPoints(req.RelativeTime,req.FromTime,req.ToTime,req.GroupByTag,req.GroupByTag,req.Filters)
 		msg = fimpgo.NewMessage("evt.tsdb.data_points_report", "ecollector", fimpgo.VTypeObject, response, nil, nil,iotMsg)
 
 	case "cmd.tsdb.get_measurements":
@@ -236,8 +261,11 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 			log.Error(" Wrong process ID")
 			return
 		}
-		proc := api.integr.GetProcessByID(procId)
-		response,err := proc.Storage().GetDbMeasurements()
+		_, storage, err := api.getProcAndStorageByProcId(procId)
+		if err != nil {
+			return
+		}
+		response,err := storage.GetDbMeasurements()
 		if err != nil {
 			log.Error("<api> Error while getting measurements . Err:",err.Error())
 		}
@@ -255,16 +283,19 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 			return
 		}
 		var response []string
-		proc := api.integr.GetProcessByID(procId)
-		response,err = proc.Storage().GetDbRetentionPolicies()
+		_, storage, err := api.getProcAndStorageByProcId(procId)
 		if err != nil {
-			log.Error("<api> Error while getting measurements . Err:",err.Error())
+			return
 		}
-		msg = fimpgo.NewMessage("evt.tsdb.retention_policies", "ecollector", fimpgo.VTypeStrArray, response, nil, nil,iotMsg)
+		response, err = storage.GetDbRetentionPolicies()
+		if err != nil {
+			log.Error("<api> Error while getting measurements . Err:", err.Error())
+		}
+		msg = fimpgo.NewMessage("evt.tsdb.retention_policies", "ecollector", fimpgo.VTypeStrArray, response, nil, nil, iotMsg)
 
 	case "cmd.tsdb.add_retention_policy":
 		// configure retentions
-		val,err := iotMsg.GetStrMapValue()
+		val, err := iotMsg.GetStrMapValue()
 		if err != nil {
 			log.Debug(" Wrong value format for cmd.influxdb.query")
 			return
@@ -274,66 +305,79 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 			log.Error(" Wrong process ID")
 			return
 		}
-		name  , _ := val["name"]
-		duration  , _ := val["duration"]
-		proc := api.integr.GetProcessByID(procId)
-		proc.Storage().AddRetentionPolicy(name,duration)
+		name, _ := val["name"]
+		duration, _ := val["duration"]
+
+		_, storage, err := api.getProcAndStorageByProcId(procId)
+		if err != nil {
+			return
+		}
+		storage.AddRetentionPolicy(name, duration)
 
 	case "cmd.tsdb.update_retention_policy":
 		// configure retentions
-		val,err := iotMsg.GetStrMapValue()
+		val, err := iotMsg.GetStrMapValue()
 		if err != nil {
 			log.Debug(" Wrong value format for cmd.influxdb.query")
 			return
 		}
-		name  , _ := val["name"]
-		duration  , _ := val["duration"]
+		name, _ := val["name"]
+		duration, _ := val["duration"]
 		procId := api.getProcID(val)
 		if procId < 0 {
 			log.Error(" Wrong process ID")
 			return
 		}
-		proc := api.integr.GetProcessByID(procId)
-		proc.Storage().UpdateRetentionPolicy(name,duration)
+
+		_, storage, err := api.getProcAndStorageByProcId(procId)
+		if err != nil {
+			return
+		}
+		storage.UpdateRetentionPolicy(name, duration)
 
 	case "cmd.tsdb.delete_object":
 		// configure retentions
-		val,err := iotMsg.GetStrMapValue()
+		val, err := iotMsg.GetStrMapValue()
 		if err != nil {
 			log.Debug(" Wrong value format for cmd.influxdb.query")
 			return
 		}
-		name  , _ := val["name"]
-		otype  , _ := val["object_type"]
+		name, _ := val["name"]
+		otype, _ := val["object_type"]
 		procId := api.getProcID(val)
 		if procId < 0 {
 			log.Error(" Wrong process ID")
 			return
 		}
-		proc := api.integr.GetProcessByID(procId)
+
+		proc, storage, err := api.getProcAndStorageByProcId(procId)
+		if err != nil {
+			return
+		}
+
 		switch otype {
 		case "retention_policy":
 			proc.Stop()
-			proc.Storage().DeleteRetentionPolicy(name)
+			storage.DeleteRetentionPolicy(name)
 			proc.Start()
 		case "database":
 			proc.Stop()
-			proc.Storage().DropDB(name)
+			storage.DropDB(name)
 			proc.Start()
 		case "cq":
-			proc.Storage().DeleteCQ(name)
+			storage.DeleteCQ(name)
 		case "measurement":
-			proc.Storage().DeleteMeasurement(name)
+			storage.DeleteMeasurement(name)
 		}
-		response := map[string]string{"status":"ok","error":""}
-		msg = fimpgo.NewStrMapMessage("evt.tsdb.delete_object_report", "ecollector", response, nil, nil,iotMsg)
+		response := map[string]string{"status": "ok", "error": ""}
+		msg = fimpgo.NewStrMapMessage("evt.tsdb.delete_object_report", "ecollector", response, nil, nil, iotMsg)
 		// set default retention policy
 
 	case "cmd.tsdb.get_configs":
 		//
 	case "cmd.log.set_level":
 		// Configure log level
-		level , err :=iotMsg.GetStringValue()
+		level, err := iotMsg.GetStringValue()
 		if err != nil {
 			return
 		}
@@ -342,9 +386,9 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 			log.SetLevel(logLevel)
 			api.configs.LogLevel = level
 			api.configs.SaveToFile()
-			log.Info("Log level updated to = ",logLevel)
-		}else {
-			log.Error("Failed to update log level.Err: ",err.Error())
+			log.Info("Log level updated to = ", logLevel)
+		} else {
+			log.Error("Failed to update log level.Err: ", err.Error())
 		}
 
 	}
@@ -352,12 +396,26 @@ func(api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpgo
 		return
 	}
 	if iotMsg.ResponseToTopic != "" {
-		api.mqt.RespondToRequest(iotMsg,msg)
-	}else {
+		api.mqt.RespondToRequest(iotMsg, msg)
+	} else {
 		adr = fimpgo.Address{MsgType: fimpgo.MsgTypeEvt, ResourceType: fimpgo.ResourceTypeApp, ResourceName: "ecollector", ResourceAddress: "1"}
-		api.mqt.Publish(&adr,msg)
+		api.mqt.Publish(&adr, msg)
 	}
 
+}
+
+func (api *AdminApi) getProcAndStorageByProcId(procId tsdb.IDt) (*tsdb.Process, storage.DataStorage,error) {
+	proc := api.integr.GetProcessByID(procId)
+	if proc == nil {
+		log.Error("Can't find process with id = %d ", procId)
+		return nil,nil,fmt.Errorf("unknown process")
+	}
+	storage := proc.Storage()
+	if storage == nil {
+		log.Error("Storage is not initialized ")
+		return nil,nil,fmt.Errorf("nil storage")
+	}
+	return proc,storage,nil
 }
 
 

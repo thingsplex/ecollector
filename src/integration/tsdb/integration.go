@@ -175,7 +175,8 @@ func (it *Integration) InitProcesses() error {
 		return errors.New("process not configured")
 	}
 	//Initializing shared metadata store.The store is shared between processes.
-	mqt := fimpgo.NewMqttTransport(it.processConfigs[0].MqttBrokerAddr, it.processConfigs[0].MqttClientID+"-vinc-mstore", it.processConfigs[0].MqttBrokerUsername, it.processConfigs[0].MqttBrokerPassword, true, 1, 1)
+	mqttClientId := fmt.Sprintf("vinc_mstore_%d", utils.GenerateRandomNumber())
+	mqt := fimpgo.NewMqttTransport(it.processConfigs[0].MqttBrokerAddr, mqttClientId, it.processConfigs[0].MqttBrokerUsername, it.processConfigs[0].MqttBrokerPassword, true, 1, 1)
 	mqt.Start()
 	it.serviceMedataStore = metadata.NewVincMetadataStore(mqt)
 	err := it.serviceMedataStore.Start()
