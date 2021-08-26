@@ -17,16 +17,19 @@ func ParseTime(val string)(time.Time,error) {
 	return time.Parse(time.RFC3339, val)
 }
 
-func ResolveRetentionName(fromTime,toTime string) (string,error) {
+func ResolveRetentionName(fromTime,toTime,profile string) (string,error) {
 	from , errFrom := ParseTime(fromTime)
 	if errFrom != nil {
 		return "", errFrom
 	}
 	timeSinceNow:= time.Now().Sub(from)
-	return ResolveRetentionByElapsedTimeDuration(timeSinceNow),nil
+	return ResolveRetentionByElapsedTimeDuration(timeSinceNow,profile),nil
 }
 // ResolveRetentionByElapsedTimeDuration converts duration into retention policy. Used for query operations.
-func ResolveRetentionByElapsedTimeDuration(timeSinceNow time.Duration) string {
+func ResolveRetentionByElapsedTimeDuration(timeSinceNow time.Duration,profile string) string {
+	if profile != ProfileOptimized {
+		return "gen_raw"
+	}
 	switch  {
 	case timeSinceNow > 12*MonthDuration:
 		return "gen_year"
@@ -57,7 +60,10 @@ func ResolveFieldFullName(name,retentionPolicyName string) string  {
 	}
 }
 
-func GetRetentionTimeGroupDuration(name string ) time.Duration {
+func GetRetentionTimeGroupDuration(name , profile string ) time.Duration {
+	if profile != ProfileOptimized {
+		return 0
+	}
 	switch name {
 	case "gen_day":
 		return 1*time.Minute
@@ -77,11 +83,10 @@ func GetRetentionTimeGroupDuration(name string ) time.Duration {
 // if  retention duration > target
 // return
 
-func ResolveRetentionByTimeGroup(timeGroup string) string {
-	//pr.AddCQ("raw_to_day","gen_raw","gen_day","1m")
-	//pr.AddCQ("day_to_week","gen_day","gen_week","10m")
-	//pr.AddCQ("week_to_month","gen_week","gen_month","1h")
-	//pr.AddCQ("month_to_year","gen_month","gen_year","1d")
+func ResolveRetentionByTimeGroup(timeGroup,profile string) string {
+	if profile != ProfileOptimized {
+		return "gen_raw"
+	}
 	d := ResolveDurationFromRelativeTime(timeGroup)
 	switch  {
 	case d >= 1*DayDuration:
@@ -138,8 +143,8 @@ func CalculateDuration(fromTime,toTime string) (time.Duration,error) {
 }
 
 // ResolveWriteRetentionPolicyName converts measurement into retention policy
-func ResolveWriteRetentionPolicyName(mName string ) string {
-	if mName == "electricity_meter_energy_sampled" {
+func ResolveWriteRetentionPolicyName(mName string ,profile string) string {
+	if mName == "electricity_meter_energy_sampled" && profile == ProfileOptimized {
 		return "gen_year"
 	}
 	if IsHighFrequencyData(mName){

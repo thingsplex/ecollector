@@ -63,7 +63,10 @@ func (pr *Process) Init() error {
 	pr.State = ProcStateStarting
 	if pr.Config.StorageType == "" || pr.Config.StorageType == StorageTypeInfluxdb {
 		log.Info("<tsdb> Configuring influxDB data store")
-		pr.storage, err = storage.NewInfluxV1Storage(pr.Config.InfluxAddr, pr.Config.InfluxUsername, pr.Config.InfluxPassword, pr.Config.InfluxDB)
+		pr.storage, err = storage.NewInfluxV1Storage(pr.Config.InfluxAddr, pr.Config.InfluxUsername, pr.Config.InfluxPassword, pr.Config.InfluxDB,pr.Config.Profile)
+	}else if pr.Config.StorageType == StorageTypeInfluxdbV2 {
+		log.Info("<tsdb> Configuring influxDBV2 data store")
+		pr.storage, err = storage.NewInfluxV2Storage(pr.Config.InfluxAddr, pr.Config.InfluxUsername, pr.Config.InfluxPassword, pr.Config.InfluxDB,pr.Config.Profile)
 	}else if pr.Config.StorageType == StorageTypeCsv {
 		log.Info("<tsdb> Configuring CSV data store")
 		pr.storage,err = storage.NewCsvStorage(pr.Config.StoragePath)
@@ -83,7 +86,7 @@ func (pr *Process) Init() error {
 		}
 		// Setting up retention policies
 		log.Info("Setting up retention policies")
-		if pr.Config.Profile == ProfileOptimized {
+		if pr.Config.Profile == storage.ProfileOptimized {
 			pr.storage.InitDefaultBuckets()
 		} else {
 			pr.storage.InitSimpleBuckets()
@@ -148,7 +151,7 @@ func (pr *Process) OnMessage(topic string, addr *fimpgo.Address, iotMsg *fimpgo.
 			if points != nil {
 				for i := range points {
 					//log.Debugf("Measurement name = ",points[i].MeasurementName)
-					if storage.IsHighFrequencyData(points[i].MeasurementName) && pr.Config.Profile != ProfileRaw {
+					if storage.IsHighFrequencyData(points[i].MeasurementName) && pr.Config.Profile != storage.ProfileRaw {
 						// writing into aggregation store
 						fields, _ := points[i].Point.Fields()
 						// setting device profile
@@ -286,7 +289,7 @@ func (pr *Process) filter(context *MsgContext, topic string, iotMsg *fimpgo.Fimp
 // Write - writes data points into batch point
 func (pr *Process) Write(point *DataPoint) {
 	// log.Debugf("Point: %+v", point)
-	rpName := storage.ResolveWriteRetentionPolicyName(point.MeasurementName)
+	rpName := storage.ResolveWriteRetentionPolicyName(point.MeasurementName,pr.Config.Profile)
 	log.Debugf("<tsdb> pID = %d. Writing measurement: %s into %s", pr.ID, point.Point.Name(), rpName)
 	pr.writeMutex.Lock()
 	bp, ok := pr.batchPoints[rpName]

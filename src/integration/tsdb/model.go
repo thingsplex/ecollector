@@ -19,11 +19,10 @@ const (
     ProcStateInitialized = "INITIALIZED"
 
 	StorageTypeInfluxdb = "influxdb"
+	StorageTypeInfluxdbV2 = "influxdbV2"
 	StorageTypeCsv      = "csv"
 
-	ProfileSimple    = "simple"
-	ProfileOptimized = "optimized"
-	ProfileRaw       = "raw"
+
 )
 
 // Transform defines function which converts IotMsg into influx data point

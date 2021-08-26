@@ -59,7 +59,7 @@ func main() {
 			panic("Can't copy config file.")
 		}
 	}
-	log.Info("Loading main config file from ",configFile)
+
 	configs := model.NewConfigs(configFile,workDir)
 	err := configs.LoadFromFile()
 	if err != nil {
@@ -67,6 +67,7 @@ func main() {
 		panic("Can't parse config file.")
 	}
 	SetupLog(configs.LogFile, configs.LogLevel, configs.LogFormat)
+	log.Info("Loading main config file from ",configFile)
 	log.Infof("--------------Starting ECollector v.%s -----------------",Version)
 
 	integr := tsdb.Boot(configs)

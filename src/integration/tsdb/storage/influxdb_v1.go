@@ -9,6 +9,7 @@ import (
 
 type  InfluxV1Storage struct {
 	dbName string
+	profile string
 	influxC    influx.Client
 }
 
@@ -20,9 +21,9 @@ type DataPointsFilter struct {
 }
 
 
-func NewInfluxV1Storage(address,username,password,dbName string) (DataStorage,error) {
+func NewInfluxV1Storage(address,username,password,dbName,profile string) (DataStorage,error) {
 	var err error
-	ic := &InfluxV1Storage{dbName: dbName}
+	ic := &InfluxV1Storage{dbName: dbName,profile: profile}
 	ic.influxC, err = influx.NewHTTPClient(influx.HTTPConfig{
 		Addr:     address, //"http://localhost:8086",
 		Username: username,
@@ -30,7 +31,7 @@ func NewInfluxV1Storage(address,username,password,dbName string) (DataStorage,er
 		Timeout:30*time.Second,
 	})
 	if err != nil {
-		log.Fatalln("Error: ", err)
+		log.Error("Error: ", err)
 		return nil,err
 	}
 	return ic,nil
@@ -112,7 +113,7 @@ func (pr *InfluxV1Storage) GetDataPoints(fieldName,measurement,relativeTime,from
 
 	if fromTime != "" && toTime != "" {
 		if retentionPolicyName == "" {
-			retentionPolicyName,err  = ResolveRetentionName(fromTime,toTime)
+			retentionPolicyName,err  = ResolveRetentionName(fromTime,toTime,pr.profile)
 		}
 		if err != nil {
 			log.Error("<ifv1> Can't resolve retention name.Err:",err.Error())
@@ -123,10 +124,10 @@ func (pr *InfluxV1Storage) GetDataPoints(fieldName,measurement,relativeTime,from
 		timeInterval = ResolveDurationFromRelativeTime(relativeTime)
 		userSetTimeGroupDuration := ResolveDurationFromRelativeTime(groupByTime)
 		if retentionPolicyName == "" {
-			retentionPolicyName = ResolveRetentionByElapsedTimeDuration(timeInterval)
-			aggregationDuration := GetRetentionTimeGroupDuration(retentionPolicyName)
+			retentionPolicyName = ResolveRetentionByElapsedTimeDuration(timeInterval,pr.profile)
+			aggregationDuration := GetRetentionTimeGroupDuration(retentionPolicyName,pr.profile)
 			if (userSetTimeGroupDuration >= aggregationDuration) && dataFunction == "mean" {
-				retentionPolicyName = ResolveRetentionByTimeGroup(groupByTime)
+				retentionPolicyName = ResolveRetentionByTimeGroup(groupByTime,pr.profile)
 			}
 		}
 		timeQuery = fmt.Sprintf("time > now()-%s",relativeTime)
@@ -366,7 +367,7 @@ func (pr *InfluxV1Storage) DeleteMeasurement(name string)error {
 
 }
 
-// Return list of measurements from db
+//GetDbMeasurements Return list of measurements from db
 func (pr *InfluxV1Storage) GetDbMeasurements() ([]string,error) {
 	q := influx.NewQuery("SHOW MEASUREMENTS", pr.dbName, "ms")
 	if response, err := pr.influxC.Query(q); err == nil  {
@@ -386,7 +387,7 @@ func (pr *InfluxV1Storage) GetDbMeasurements() ([]string,error) {
 	}
 }
 
-// Return list of measurements from db
+//GetDbRetentionPolicies Return list of measurements from db
 func (pr *InfluxV1Storage) GetDbRetentionPolicies() ([]string,error) {
 	q := influx.NewQuery("SHOW RETENTION POLICIES", pr.dbName, "ms")
 	if response, err := pr.influxC.Query(q); err == nil {

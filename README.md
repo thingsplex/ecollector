@@ -15,7 +15,7 @@ Measurements : sensors , electricity_meter_power , electricity_meter_energy
 
 | Name      | Expected query range        | Aggregation | Retention |
 |-----------|-----------------------------|-------------|-----------|
-| gen_year  | 1-5 years for last 5 years  | 6 hours avg | 5 years   |
+| gen_year  | 1-5 years for last 5 years  | 1 d avg     | 5 years   |
 | gen_month | 1-12 month for last year    | 1 hour avg  | 1 year    |
 | gen_week  | 1-4 weeks for  last 3 month | 10 min avg  | 3 month   |
 | gen_day   | 2-14 days for last 2 weeks  | 1 min avg   | 2 weeks   |

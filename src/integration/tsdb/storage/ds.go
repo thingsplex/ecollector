@@ -2,6 +2,12 @@ package storage
 
 import "github.com/influxdata/influxdb1-client/v2"
 
+const (
+	ProfileSimple    = "simple" // Does high frequency optimization but writes everything to the same gen_raw bucket
+	ProfileOptimized = "optimized" // Does all optimizations
+	ProfileRaw       = "raw" // Writes to DB as-is , without any optimizations
+)
+
 type DataStorage interface {
 	InitDefaultBuckets() error
 	InitSimpleBuckets()
