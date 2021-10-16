@@ -145,7 +145,11 @@ func (dpa *DataPointAggregator) startInputStreamProcessor() {
 }
 
 func (dpa *DataPointAggregator) AddDataPoint(dp DataPoint) {
-	dpa.inputChannel <- dp
+	select  {
+	case dpa.inputChannel <- dp:
+	default:
+		log.Error("<aggr> Input aggregator channel is blocked.")
+	}
 }
 
 // calculateAndPublishAggregates - calculates aggregates for all series and sends results over output channel
