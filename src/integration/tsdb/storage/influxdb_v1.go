@@ -4,6 +4,7 @@ import (
 	"fmt"
 	influx "github.com/influxdata/influxdb1-client/v2"
 	log "github.com/sirupsen/logrus"
+	"regexp"
 	"time"
 )
 
@@ -11,6 +12,7 @@ type  InfluxV1Storage struct {
 	dbName string
 	profile string
 	influxC    influx.Client
+	timeGroupRegex *regexp.Regexp
 }
 
 type DataPointsFilter struct {
@@ -30,6 +32,9 @@ func NewInfluxV1Storage(address,username,password,dbName,profile string) (DataSt
 		Password: password,
 		Timeout:30*time.Second,
 	})
+
+	ic.timeGroupRegex,_ = regexp.Compile("^\\d{1,2}[mhdw]$")
+
 	if err != nil {
 		log.Error("Error: ", err)
 		return nil,err
@@ -207,7 +212,7 @@ func (pr *InfluxV1Storage) GetEnergyDataPoints(relativeTime,fromTime,toTime,grou
 
 	var timeQuery,filterStr string
 
-	if groupByTime != "1d" {
+	if !pr.timeGroupRegex.MatchString(groupByTime) {
 		groupByTime = "1h"
 	}
 

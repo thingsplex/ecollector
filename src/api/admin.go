@@ -243,7 +243,7 @@ func (api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpg
 			if err != nil {
 				return
 			}
-			response := storage.GetEnergyDataPoints(req.RelativeTime, req.FromTime, req.ToTime, req.GroupByTag, req.GroupByTag, req.Filters)
+			response := storage.GetEnergyDataPoints(req.RelativeTime, req.FromTime, req.ToTime, req.GroupByTime, req.GroupByTag, req.Filters)
 			msg = fimpgo.NewMessage("evt.tsdb.data_points_report", "ecollector", fimpgo.VTypeObject, response, nil, nil, iotMsg)
 
 		case "cmd.tsdb.get_measurements":
