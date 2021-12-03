@@ -108,7 +108,7 @@ func (it *Integration) LoadConfig() error {
 	if _, err := os.Stat(it.storeFullPath); os.IsNotExist(err) {
 		it.processConfigs, err = it.GetDefaultIntegrConfig()
 		if err != nil {
-			log.Error("Can't load default configurations.Err: ",err.Error())
+			log.Error("Can't load default configurations.Err: ", err.Error())
 		}
 		log.Info("Integration configuration is loaded from default.")
 		return it.SaveConfigs()
@@ -170,7 +170,7 @@ func (it *Integration) SaveConfigs() error {
 
 // InitProcesses loads and starts ALL processes based on ProcessConfigs
 func (it *Integration) InitProcesses() error {
-
+	var err error
 	if it.processConfigs == nil {
 		return errors.New("process not configured")
 	}
@@ -178,12 +178,21 @@ func (it *Integration) InitProcesses() error {
 	mqttClientId := fmt.Sprintf("vinc_mstore_%d", utils.GenerateRandomNumber())
 	mqt := fimpgo.NewMqttTransport(it.processConfigs[0].MqttBrokerAddr, mqttClientId, it.processConfigs[0].MqttBrokerUsername, it.processConfigs[0].MqttBrokerPassword, true, 1, 1)
 	mqt.Start()
-	it.serviceMedataStore = metadata.NewVincMetadataStore(mqt)
-	err := it.serviceMedataStore.Start()
+	log.Info("Loading metadata from ", it.processConfigs[0].MetadataStore)
+	if it.processConfigs[0].MetadataStore == "" || it.processConfigs[0].MetadataStore == "vinculum" {
+		it.serviceMedataStore = metadata.NewVincMetadataStore(mqt)
+		err = it.serviceMedataStore.Start()
+	} else if it.processConfigs[0].MetadataStore == "tpflow" {
+
+	} else if it.processConfigs[0].MetadataStore == "file" {
+		it.serviceMedataStore = metadata.NewFileMetadataStore(it.processConfigs[0].MetadataStoreConfig)
+		err = it.serviceMedataStore.Start()
+	}
+
 	if err != nil {
-		log.Error("<boot> The process failed to connect to Meta Store . ")
+		log.Error("<boot> The process failed to connect to Meta Store . Err : ", err.Error())
 	} else {
-		log.Info("<boot> Meta store sucessfully initialized")
+		log.Info("<boot> Meta store successfully initialized")
 	}
 
 	for i := range it.processConfigs {
@@ -229,14 +238,14 @@ func (it *Integration) AddProcess(procConfig *ProcessConfig) (IDt, error) {
 		defaultProc, err := it.GetDefaultIntegrConfig()
 		if err != nil {
 			if err != nil {
-				log.Error("Can't load default configurations.Err: ",err.Error())
+				log.Error("Can't load default configurations.Err: ", err.Error())
 			}
 			return 0, err
 		}
 		procConfig = &ProcessConfig{}
 		*procConfig = defaultProc[0]
 		newID := GetNewID(it.processConfigs)
-		log.Info("<tsdb> Adding new process.pID = ",newID)
+		log.Info("<tsdb> Adding new process.pID = ", newID)
 		procConfig.ID = newID
 		procConfig.Autostart = false
 	}

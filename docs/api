@@ -5,7 +5,8 @@ Request :
   "serv": "ecollector",
   "val_t": "str_map",
   "val": {
-    "query": "SELECT count(\"value\") AS \"count_value\" FROM \"default_20w\".\"sensor_presence.evt.presence.report\" WHERE  topic='pt:j1/mt:evt/rt:dev/rn:zw/ad:1/sv:sensor_presence/ad:9_0' GROUP BY time(30m) FILL(null)"
+    "proc_id":"1",
+    "query": "SELECT count(\"value\") AS \"count_value\" FROM \"gen_default\".\"sensor_presence.evt.presence.report\" WHERE  topic='pt:j1/mt:evt/rt:dev/rn:zw/ad:1/sv:sensor_presence/ad:9_0' GROUP BY time(30m) FILL(null)"
   },
   "tags": null,
   "props": null,
@@ -183,13 +184,71 @@ pt:j1/mt:evt/rt:app/rn:ecollector/ad:1
 
 Another example :
 
+Req :
+{
+  "serv": "ecollector",
+  "type": "cmd.tsdb.query",
+  "val_t": "str_map",
+  "val": {
+    "proc_id": "1",
+    "query":"SELECT mean(\"value\") AS \"mean_value\" FROM \"gen_raw\".\"electricity_meter_power\" WHERE time > now()-10m AND \"dev_id\"='100'"
+  },
+  "props": null,
+  "tags": null,
+  "resp_to": "pt:j1/mt:rsp/rt:app/rn:tplex-ui/ad:1",
+  "src": "tplex-ui",
+  "ver": "1",
+  "uid": "49da197e-b2c3-4f7a-9026-7d1dd2b34827",
+  "topic": "pt:j1/mt:cmd/rt:app/rn:ecollector/ad:1"
+}
+
+Resp :
+
+{
+  "serv": "ecollector",
+  "type": "evt.tsdb.query_report",
+  "val_t": "object",
+  "val": {
+    "Results": [
+      {
+        "Series": [
+          {
+            "name": "electricity_meter_power",
+            "columns": [
+              "time",
+              "mean_value"
+            ],
+            "values": [
+              [
+                1637446266,
+                815.7432432432432
+              ]
+            ]
+          }
+        ],
+        "Messages": null
+      }
+    ]
+  },
+  "props": null,
+  "tags": null,
+  "src": "-",
+  "ver": "1",
+  "uid": "b5c09949-4423-4c3f-89e5-7a9871fdc500",
+  "topic": "pt:j1/mt:rsp/rt:app/rn:tplex-ui/ad:1"
+}
+
+Another example :
+
+
 Req:
 {
   "type": "cmd.tsdb.query",
   "serv": "ecollector",
   "val_t": "str_map",
-  "val": {
-    "query": "SELECT last(value) AS count_value FROM \"default_20w\".\"sensor_presence.evt.presence.report\" GROUP BY location_id  FILL(null)"
+  "val": {,
+    "proc_id":"1",
+    "query": "SELECT last(value) AS count_value FROM \"gen_default\".\"sensor_presence.evt.presence.report\" GROUP BY location_id  FILL(null)"
   },
   "tags": null,
   "props": null,
@@ -407,4 +466,30 @@ pt:j1/mt:cmd/rt:app/rn:ecollector/ad:1
   "ver": "1",
   "uid": "f08f29b0-7db7-472a-887a-1c7427d9fb43",
   "topic": "pt:j1/mt:cmd/rt:app/rn:ecollector/ad:1"
+}
+
+pt:j1/mt:cmd/rt:app/rn:ecollector/ad:1
+{
+  "serv": "ecollector",
+  "type": "cmd.tsdb.write_data_points",
+  "val_t": "object",
+  "val": {
+    "proc_id": 1,
+    "bucket": "gen_default",
+    "dp": [
+      {
+        "name": "test_data_point",
+        "tags": {},
+        "fields": {
+          "val": 15
+        },
+        "ts": 0
+      }
+    ]
+  },
+  "props": null,
+  "tags": null,
+  "src": "-",
+  "ver": "1",
+  "uid": "080d0d3c-aacb-422b-aeda-a2210121456f"
 }

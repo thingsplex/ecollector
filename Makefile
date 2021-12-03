@@ -1,4 +1,4 @@
-version="0.8.3"
+version="0.8.5"
 version_file=VERSION
 working_dir=$(shell pwd)
 arch="armhf"
@@ -29,6 +29,11 @@ configure-arm:
 configure-amd64:
 	python ./scripts/config_env.py prod $(version) amd64
 
+run-influxdb-1711:
+	docker run --name influxdb1 -d -p 8086:8086 -v influxdb:/var/lib/influxdb influxdb:1.7.11-alpine
+
+run-influxdb-211:
+	docker run --name influxdb2 -d -p 8087:8086 -v influxdb2:/var/lib/influxdb2 influxdb:2.1.1-alpine
 
 package-tar:
 	cp ./src/ecollector package/tar/

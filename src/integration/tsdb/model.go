@@ -103,6 +103,8 @@ type ProcessConfig struct {
 	Profile      string // simple , optimized , raw
 	StoragePath  string
 	StorageType  string // influxdb,csv,parquet
+	MetadataStore string
+	MetadataStoreConfig string
 }
 
 //ProcessConfigs is a collection of ProcessConfigs

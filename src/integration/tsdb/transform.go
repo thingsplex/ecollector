@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"github.com/futurehomeno/fimpgo"
 	influx "github.com/influxdata/influxdb1-client/v2"
+	log "github.com/sirupsen/logrus"
 	"github.com/thingsplex/ecollector/integration/tsdb/processing"
+	"github.com/thingsplex/ecollector/model"
 	"strconv"
 )
 
@@ -13,10 +15,11 @@ const (
 	MeasurementElecMeterPower         = "electricity_meter_power"
 	MeasurementElecMeterEnergy        = "electricity_meter_energy"
 	MeasurementElecMeterEnergySampled = "electricity_meter_energy_sampled"
+	MeasurementElecPriceInfo          = "electricity_price_info"
 	DirectionImport                   = "import"
 	DirectionExport                   = "export"
 
-	MaxAllowedPower                   = 30000
+	MaxAllowedPower = 30000
 )
 
 // DefaultTransform - transforms IotMsg into InfluxDb datapoint
@@ -37,7 +40,7 @@ func DefaultTransform(context *MsgContext, topic string, addr *fimpgo.Address, i
 	fields["src"] = iotMsg.Source // src can change as several services can generate commands as result the field can't be stored as tag
 	valueType := iotMsg.ValueType
 	switch iotMsg.Service {
-	case "meter_elec", "sensor_power","chargepoint":
+	case "meter_elec", "sensor_power", "chargepoint":
 		var mName string
 		tags["service"] = iotMsg.Service
 		if iotMsg.Type == "evt.meter.report" || iotMsg.Type == "evt.sensor.report" {
@@ -50,7 +53,7 @@ func DefaultTransform(context *MsgContext, topic string, addr *fimpgo.Address, i
 
 				if unit == "W" || unit == "kW" {
 					if unit == "kW" {
-						val = 1000*val
+						val = 1000 * val
 						fields["value"] = val
 					}
 
@@ -75,7 +78,7 @@ func DefaultTransform(context *MsgContext, topic string, addr *fimpgo.Address, i
 					}
 
 				} else {
-					return nil, fmt.Errorf("unknown unit: %s ",unit)
+					return nil, fmt.Errorf("unknown unit: %s ", unit)
 				}
 				context.measurementName = mName
 				valueType = "_skip_"
@@ -95,13 +98,13 @@ func DefaultTransform(context *MsgContext, topic string, addr *fimpgo.Address, i
 
 				point2, err := influx.NewPoint(MeasurementElecMeterEnergySampled, tags, fields, context.time)
 				if err == nil {
-						points = append(points, &DataPoint{
-							MeasurementName:  MeasurementElecMeterEnergySampled,
-							AggregationValue: val,
-							AggregationFunc:  processing.AggregationFuncSum,
-							SeriesID:         seriesID,
-							Point:            point2,
-						})
+					points = append(points, &DataPoint{
+						MeasurementName:  MeasurementElecMeterEnergySampled,
+						AggregationValue: val,
+						AggregationFunc:  processing.AggregationFuncSum,
+						SeriesID:         seriesID,
+						Point:            point2,
+					})
 				}
 				valueType = "_skip_"
 
@@ -235,42 +238,7 @@ func DefaultTransform(context *MsgContext, topic string, addr *fimpgo.Address, i
 					})
 				}
 			}
-			//freq, freqOk := val["freq"]
-			//if freqOk {
-			//	fields["freq"] = freq
-			//	fields["freq_min"], _ = val["freq_min"]
-			//	fields["freq_max"], _ = val["freq_max"]
-			//}
-			//
-			//fields["u1"], _ = val["u1"]
-			//fields["u2"], _ = val["u2"]
-			//fields["u3"], _ = val["u3"]
-			//fields["i1"], _ = val["i1"]
-			//fields["i2"], _ = val["i2"]
-			//fields["i3"], _ = val["i3"]
-			//
-			//dcp, dcpOk := val["dc_p"]
-			//if dcpOk {
-			//	fields["dc_p"] = dcp
-			//	fields["dc_p_min"], _ = val["dc_p_min"]
-			//	fields["dc_p_max"], _ = val["dc_p_max"]
-			//}
-			//
-			//dcu, dcuOk := val["dc_u"]
-			//if dcuOk {
-			//	fields["dc_u"] = dcu
-			//	fields["dc_u_min"], _ = val["dc_u_min"]
-			//	fields["dc_u_max"], _ = val["dc_u_max"]
-			//}
-			//
-			//dci, dciOk := val["dc_i"]
-			//if dciOk {
-			//	fields["dc_i"] = dci
-			//	fields["dc_i_min"], _ = val["dc_i_min"]
-			//	fields["dc_i_max"], _ = val["dc_i_max"]
-			//}
 			fields = nil
-			//context.measurementName = "electricity_meter_ext"
 			valueType = "_skip_"
 		}
 
@@ -299,6 +267,33 @@ func DefaultTransform(context *MsgContext, topic string, addr *fimpgo.Address, i
 			fields["unit"] = unit
 			valueType = "_skip_"
 		}
+	case "price_info_elec":
+		if iotMsg.Type == "evt.price_forecast.report" {
+			var priceInfoReport []model.PriceInfo
+			err = iotMsg.GetObjectValue(&priceInfoReport)
+			if err != nil {
+				return nil, errors.New("incompatible price info format . err : " + err.Error())
+			}
+			for i := range priceInfoReport {
+				pTags := getDefaultTags(context, topic, domain)
+				pTags["dir"] = DirectionExport
+				pTags["service"] = iotMsg.Service
+				pFields := map[string]interface{}{"value": priceInfoReport[i].Total, "level": priceInfoReport[i].Level, "unit": priceInfoReport[i].Currency}
+				log.Debug("Price info time :", priceInfoReport[i].StartsAt)
+				point, err := influx.NewPoint(MeasurementElecPriceInfo, pTags, pFields, priceInfoReport[i].StartsAt)
+				if err == nil {
+					points = append(points, &DataPoint{
+						MeasurementName:  MeasurementElecPriceInfo,
+						AggregationValue: "value",
+						AggregationFunc:  processing.AggregationFuncMean,
+						SeriesID:         fmt.Sprintf("%s;%s;import", MeasurementElecPriceInfo, seriesID),
+						Point:            point,
+					})
+				}
+			}
+		}
+		fields = nil
+		valueType = "_skip_"
 	}
 
 	switch valueType {
@@ -337,7 +332,6 @@ func DefaultTransform(context *MsgContext, topic string, addr *fimpgo.Address, i
 	case "_skip_":
 
 	default:
-
 		fields["value"] = iotMsg.Value
 	}
 	if fields != nil {
@@ -352,7 +346,6 @@ func DefaultTransform(context *MsgContext, topic string, addr *fimpgo.Address, i
 			}), err
 		}
 	}
-
 	return points, err
 
 }
