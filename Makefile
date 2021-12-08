@@ -1,4 +1,5 @@
-version="0.8.5"
+#version="0.8.6"
+version:=`git describe --tags | cut -c 2-`
 version_file=VERSION
 working_dir=$(shell pwd)
 arch="armhf"
@@ -62,6 +63,28 @@ tar-win-amd64: clean build-go-win-amd64 package-tar
 tar-linux-amd64: clean build-go-linux-amd64 package-tar
 	@echo "MAC-amd64 application was packaged into tar archive "
 
+build-go-amd64:
+	cd ./src;GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${version}" -mod=vendor -o ../package/docker/build/amd64/ecollector service.go;cd ../
+
+build-go-arm64:
+	cd ./src;GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X main.Version=${version}" -mod=vendor -o ../package/docker/build/arm64/ecollector service.go;cd ../
+
+docker-amd64 : build-go-amd64 package-docker-amd64
+
+docker-arm64 : build-go-arm64 package-docker-arm64
+
+package-docker-local: build-go-amd64
+	docker build --build-arg TARGETARCH=amd64 -t thingsplex/ecollector:${version} -t thingsplex/ecollector:latest ./package/docker
+
+package-docker-multi:
+	docker buildx build --platform linux/arm64,linux/amd64 -t thingsplex/ecollector:${version} -t thingsplex/ecollector:latest ./package/docker --push
+
+docker-multi-setup : configure-amd64
+	docker buildx create --name mybuilder
+	docker buildx use mybuilder
+
+docker-multi-publish : build-go-arm64 build-go-amd64 package-docker-multi
+
 run :
 	cd ./src; go run service.go -c testdata/config.json;cd ../
 
@@ -76,5 +99,8 @@ remote-install : deb-arm upload
 
 publish-reprepo:
 	scp package/build/ecollector_$(version)_armhf.deb $(reprepo_host):~/apps
+
+run-docker:
+	docker run -d -v ecollector:/thingsplex/ecollector/data -e MQTT_URI=tcp://192.168.86.33:1884 -e MQTT_USERNAME=shurik -e MQTT_PASSWORD=molodec --network host --name ecollector thingsplex/ecollector:latest
 
 .phony : clean

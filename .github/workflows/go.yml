@@ -1,0 +1,47 @@
+name: Go
+on:
+  push:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      event_name:
+        description: 'git event name , options: push,release'
+        required: false
+jobs:
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Set up Go 1.17
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.17
+        id: go
+
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Make package
+        run: make deb-arm
+
+      - name: Upload the artifacts
+        uses: actions/upload-artifact@v2
+        with:
+            path: |
+              'package/build/'  
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+
+      - name: Build container
+        if: github.event_name == 'release' || github.inputs.event_name == 'release'
+        run: |
+           make docker-multi-setup
+           make docker-multi-publish
+

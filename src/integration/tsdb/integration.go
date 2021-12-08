@@ -29,6 +29,9 @@ type Integration struct {
 	serviceMedataStore       metadata.MetadataStore // metadata store is used for event enrichment
 	DisableDiskMonitor       bool
 	DiskMonitorShutdownLimit float64 // used disk space limit in % , if disk used space goes above the limit , ecollector stops all processes
+	ControlMqttUri           string
+	ControlMqttUsername      string
+	ControlMqttPassword      string
 }
 
 func (it *Integration) Processes() []*Process {
@@ -175,11 +178,11 @@ func (it *Integration) InitProcesses() error {
 		return errors.New("process not configured")
 	}
 	//Initializing shared metadata store.The store is shared between processes.
-	mqttClientId := fmt.Sprintf("vinc_mstore_%d", utils.GenerateRandomNumber())
-	mqt := fimpgo.NewMqttTransport(it.processConfigs[0].MqttBrokerAddr, mqttClientId, it.processConfigs[0].MqttBrokerUsername, it.processConfigs[0].MqttBrokerPassword, true, 1, 1)
-	mqt.Start()
 	log.Info("Loading metadata from ", it.processConfigs[0].MetadataStore)
 	if it.processConfigs[0].MetadataStore == "" || it.processConfigs[0].MetadataStore == "vinculum" {
+		mqttClientId := fmt.Sprintf("vinc_mstore_%d", utils.GenerateRandomNumber())
+		mqt := fimpgo.NewMqttTransport(it.ControlMqttUri, mqttClientId, it.ControlMqttUsername, it.ControlMqttPassword, true, 1, 1)
+		mqt.Start()
 		it.serviceMedataStore = metadata.NewVincMetadataStore(mqt)
 		err = it.serviceMedataStore.Start()
 	} else if it.processConfigs[0].MetadataStore == "tpflow" {
@@ -316,7 +319,14 @@ func Boot(mainConfig *model.Configs) *Integration {
 	if mainConfig.DiskMonitorShutdownLimit == 0 {
 		mainConfig.DiskMonitorShutdownLimit = 85
 	}
-	integr := Integration{Name: "influxdb", workDir: mainConfig.WorkDirectory, DiskMonitorShutdownLimit: mainConfig.DiskMonitorShutdownLimit, DisableDiskMonitor: mainConfig.DisableDiskMonitor}
+	integr := Integration{Name: "influxdb",
+		workDir:                  mainConfig.WorkDirectory,
+		DiskMonitorShutdownLimit: mainConfig.DiskMonitorShutdownLimit,
+		DisableDiskMonitor:       mainConfig.DisableDiskMonitor,
+		ControlMqttUri:           mainConfig.MqttServerURI,
+		ControlMqttUsername:      mainConfig.MqttUsername,
+		ControlMqttPassword:      mainConfig.MqttPassword,
+	}
 	log.Info("<tsdb> Initializing integration  ")
 	integr.Init()
 	log.Info("<tsdb> Loading configs  ")
