@@ -1,5 +1,5 @@
-#version="0.8.6"
-version:=$(shell git describe --tags --always | cut -c 2-)
+version="0.8.6"
+#version:=$(shell git describe --tags --always | cut -c 2-)
 version_file=VERSION
 working_dir=$(shell pwd)
 arch="armhf"
