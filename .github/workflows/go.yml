@@ -31,17 +31,17 @@ jobs:
       - name: Upload the artifacts
         uses: actions/upload-artifact@v2
         with:
-            path: |
-              'package/build/'  
+            name: 'ecollector'
+            path: 'package/build/*'
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@v1
-        with:
-          username: ${{ secrets.DOCKER_HUB_USERNAME }}
-          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
-
-      - name: Build container
-        run: |
-           make docker-multi-setup version=${{ steps.tagName.outputs.tag }}
-           make docker-multi-publish version=${{ steps.tagName.outputs.tag }}
+#      - name: Login to Docker Hub
+#        uses: docker/login-action@v1
+#        with:
+#          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+#          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+#
+#      - name: Build container
+#        run: |
+#           make docker-multi-setup version=${{ steps.tagName.outputs.tag }}
+#           make docker-multi-publish version=${{ steps.tagName.outputs.tag }}
 
