@@ -43,6 +43,7 @@ package-tar:
 package-deb-doc-tp:
 	@echo "Packaging application as Thingsplex debian package"
 	chmod a+x package/debian_tp/DEBIAN/*
+	mkdir -p package/build
 	cp ./src/ecollector package/debian_tp/opt/thingsplex/ecollector
 	cp VERSION package/debian_tp/opt/thingsplex/ecollector
 	docker run --rm -v ${working_dir}:/build -w /build --name debuild debian dpkg-deb --build package/debian_tp
@@ -51,6 +52,7 @@ package-deb-doc-tp:
 package-deb-doc-tp-linux:
 	@echo "Packaging application as Thingsplex debian package"
 	chmod a+x package/debian_tp/DEBIAN/*
+	mkdir -p package/build
 	cp ./src/ecollector package/debian_tp/opt/thingsplex/ecollector
 	cp VERSION package/debian_tp/opt/thingsplex/ecollector
 	dpkg-deb --build package/debian_tp
