@@ -48,7 +48,18 @@ package-deb-doc-tp:
 	docker run --rm -v ${working_dir}:/build -w /build --name debuild debian dpkg-deb --build package/debian_tp
 	@echo "Done"
 
+package-deb-doc-tp-linux:
+	@echo "Packaging application as Thingsplex debian package"
+	chmod a+x package/debian_tp/DEBIAN/*
+	cp ./src/ecollector package/debian_tp/opt/thingsplex/ecollector
+	cp VERSION package/debian_tp/opt/thingsplex/ecollector
+	dpkg-deb --build package/debian_tp
+	@echo "Done"
+
 deb-arm : clean configure-arm build-go-arm package-deb-doc-tp
+	mv package/debian_tp.deb package/build/ecollector_$(version)_armhf.deb
+
+deb-arm-linux : clean configure-arm build-go-arm package-deb-doc-tp-linux
 	mv package/debian_tp.deb package/build/ecollector_$(version)_armhf.deb
 
 deb-amd : configure-amd64 build-go-linux-amd64 package-deb-doc-tp
