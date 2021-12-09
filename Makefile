@@ -1,5 +1,5 @@
 #version="0.8.6"
-version:=`git describe --tags | cut -c 2-`
+version:=$(shell git describe --tags --always | cut -c 2-)
 version_file=VERSION
 working_dir=$(shell pwd)
 arch="armhf"
@@ -102,5 +102,8 @@ publish-reprepo:
 
 run-docker:
 	docker run -d -v ecollector:/thingsplex/ecollector/data -e MQTT_URI=tcp://192.168.86.33:1884 -e MQTT_USERNAME=shurik -e MQTT_PASSWORD=molodec --network host --name ecollector thingsplex/ecollector:latest
+
+print-version :
+	@echo $(version)
 
 .phony : clean
