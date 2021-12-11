@@ -1,0 +1,47 @@
+name: Go
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      event_name:
+        description: 'git event name , options: push,release'
+        required: false
+jobs:
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: olegtarasov/get-tag@v2.1
+        id: tagName
+
+      - name: Set up Go 1.17
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.17
+        id: go
+
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Make package
+        run: make deb-arm-linux version=${{ steps.tagName.outputs.tag }}
+
+      - uses: AButler/upload-release-assets@v2.0
+        with:
+          files: 'package/build/*'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          release-tag: ${{ steps.tagName.outputs.tag }}
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+
+      - name: Build container
+        run: |
+           make docker-multi-setup version=${{ steps.tagName.outputs.tag }}
+           make docker-multi-publish version=${{ steps.tagName.outputs.tag }}
+

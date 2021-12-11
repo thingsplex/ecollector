@@ -15,11 +15,11 @@ Measurements : sensors , electricity_meter_power , electricity_meter_energy
 
 | Name      | Expected query range        | Aggregation | Retention |
 |-----------|-----------------------------|-------------|-----------|
-| gen_year  | 1-5 years for last 5 years  | 1 day avg   | 5 years   |
+| gen_year  | 1-5 years for last 5 years  | 1 d avg     | 5 years   |
 | gen_month | 1-12 month for last year    | 1 hour avg  | 1 year    |
 | gen_week  | 1-4 weeks for  last 3 month | 10 min avg  | 3 month   |
-| gen_day   | 1-3 days for last 2 weeks   | 1 min avg   | 2 weeks   |
-| gen_raw   | 1-2 days for last 2 weeks   | none        | 1 month   |  
+| gen_day   | 2-14 days for last 2 weeks  | 1 min avg   | 2 weeks   |
+| gen_raw   | 1-2 days for last 2 weeks   | none        | 2 weeks   |  
 
 ecollector -> `gen_raw` -> CQ -> `gen_day` -> CQ -> `gen_week` -> CQ -> `gen_month` -> CQ -> `gen_year` 
 
@@ -30,6 +30,21 @@ if  (`to`-`from`) < `7days` AND (now() - `from`)< `month` use `gen_day`
 Measurements : all others 
 
 Retention : 3 months , name - `default_w20`  
+
+## Query API 
+
+query params : 
+
+1. measurement name
+2. relative time . optional .
+3. from timestamp . optional.
+4. to timestamp . optional.
+5. resolution , optional , default =`auto` 
+6. missing data fill type, optional , default = `previous`   
+7. aggregation function , optional,default = `mean` 
+8. group field , optional , default = `device`
+
+calculate retention policy using `end timestamp` - `start timestamp` and values from `expected query range` column 
 
 **Message processing pipeline** : 
 ````
@@ -66,9 +81,9 @@ Retention : 3 months , name - `default_w20`
 
 ````                      
 
-                          ------------------------------------------------
-                          | ProcessConfig,Selectors,Filters,Measurements | 
-                          ------------------------------------------------
+                          -----------------------------------
+                          | ProcessConfig,Selectors,Filters | 
+                          -----------------------------------
                                |
                               \|/ 
 ----------------         ------------------------          -------------
@@ -76,9 +91,9 @@ Retention : 3 months , name - `default_w20`
 |              |         |                      |          |           |
 ----------------         ------------------------          -------------
 
-                          ------------------------------------------------
-                          | ProcessConfig,Selectors,Filters,Measurements | 
-                          ------------------------------------------------
+                          -----------------------------------
+                          | ProcessConfig,Selectors,Filters | 
+                          -----------------------------------
                                |
                               \|/ 
 ----------------         ------------------------          -------------

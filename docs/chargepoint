@@ -1,0 +1,14 @@
+{
+  "serv": "chargepoint",
+  "type": "evt.current_session.report",
+  "val_t": "float",
+  "val": 716.007,
+  "props": {
+    "unit": "kWh"
+  },
+  "tags": null,
+  "src": "easee",
+  "ver": "1",
+  "uid": "652e84ee-467d-4467-a8b4-7f0e710d529b",
+  "topic":"pt:j1/mt:evt/rt:dev/rn:easee/ad:1/sv:chargepoint/ad:EH356824"
+}

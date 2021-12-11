@@ -25,8 +25,6 @@ func NewTpMetadataStore(mqt *fimpgo.MqttTransport) MetadataStore {
 	return &TpMetadataStore{mqt: mqt}
 }
 
-
-
 func (sm *TpMetadataStore) Start() error {
 	log.Info("Loading metadata from TpRegistry")
 	respTopic := "pt:j1/mt:rsp/rt:app/rn:ecollector/ad:1"
@@ -66,4 +64,12 @@ func (sm *TpMetadataStore) GetMetadataByAddress(address string) (ServiceMetaRec 
 		}
 	}
 	return ServiceMetaRec{},errors.New("not found")
+}
+
+func (sm *TpMetadataStore) GetDevicesGroupedByType() (map[string][]string,error) {
+	return nil, nil
+}
+
+func (sm *TpMetadataStore) GetDevicesGroupedByLocation() (map[string][]string, error) {
+	return nil, nil
 }

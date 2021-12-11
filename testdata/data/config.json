@@ -1,11 +1,13 @@
 {
-  "instance_address":"1",
-  "mqtt_server_uri":"tcp://localhost:1883",
-  "mqtt_client_id_prefix":"ecollector-api",
-  "mqtt_server_username":"",
-  "mqtt_server_password":"",
+  "instance_address": "1",
+  "mqtt_server_uri": "tcp://localhost:1883",
+  "mqtt_server_username": "",
+  "mqtt_server_password": "",
+  "mqtt_client_id_prefix": "ecollector-api-test",
   "log_file": "",
   "log_level": "debug",
   "log_format": "text",
+  "init_db": false,
+  "disable_disk_monitor": true,
   "disk_monitor_shutdown_limit": 85
 }

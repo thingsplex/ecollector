@@ -1,5 +1,9 @@
 package metadata
 
+const (
+	DeviceTypeMainMeter = "meter.main_elec"
+)
+
 type ServiceMetaRec struct {
 	Address    string
 	DeviceID   int
@@ -11,4 +15,6 @@ type MetadataStore interface {
 	GetMetadataByAddress(address string) (ServiceMetaRec , error)
 	Start() error
 	Stop() error
+	GetDevicesGroupedByType() (map[string][]string,error)
+	GetDevicesGroupedByLocation() (map[string][]string, error)
 }
