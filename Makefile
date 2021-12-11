@@ -43,12 +43,25 @@ package-tar:
 package-deb-doc-tp:
 	@echo "Packaging application as Thingsplex debian package"
 	chmod a+x package/debian_tp/DEBIAN/*
+	mkdir -p package/build
 	cp ./src/ecollector package/debian_tp/opt/thingsplex/ecollector
 	cp VERSION package/debian_tp/opt/thingsplex/ecollector
 	docker run --rm -v ${working_dir}:/build -w /build --name debuild debian dpkg-deb --build package/debian_tp
 	@echo "Done"
 
+package-deb-linux-tp:
+	@echo "Packaging application as Thingsplex debian package"
+	chmod a+x package/debian_tp/DEBIAN/*
+	mkdir -p package/build
+	cp ./src/ecollector package/debian_tp/opt/thingsplex/ecollector
+	cp VERSION package/debian_tp/opt/thingsplex/ecollector
+	dpkg-deb --build package/debian_tp
+	@echo "Done"
+
 deb-arm : clean configure-arm build-go-arm package-deb-doc-tp
+	mv package/debian_tp.deb package/build/ecollector_$(version)_armhf.deb
+
+deb-arm-linux : clean configure-arm build-go-arm package-deb-linux-tp
 	mv package/debian_tp.deb package/build/ecollector_$(version)_armhf.deb
 
 deb-amd : configure-amd64 build-go-linux-amd64 package-deb-doc-tp
@@ -63,15 +76,12 @@ tar-win-amd64: clean build-go-win-amd64 package-tar
 tar-linux-amd64: clean build-go-linux-amd64 package-tar
 	@echo "MAC-amd64 application was packaged into tar archive "
 
+# Docker
 build-go-amd64:
 	cd ./src;GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${version}" -mod=vendor -o ../package/docker/build/amd64/ecollector service.go;cd ../
 
 build-go-arm64:
 	cd ./src;GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X main.Version=${version}" -mod=vendor -o ../package/docker/build/arm64/ecollector service.go;cd ../
-
-docker-amd64 : build-go-amd64 package-docker-amd64
-
-docker-arm64 : build-go-arm64 package-docker-arm64
 
 package-docker-local: build-go-amd64
 	docker build --build-arg TARGETARCH=amd64 -t thingsplex/ecollector:${version} -t thingsplex/ecollector:latest ./package/docker
@@ -101,7 +111,7 @@ publish-reprepo:
 	scp package/build/ecollector_$(version)_armhf.deb $(reprepo_host):~/apps
 
 run-docker:
-	docker run -d -v ecollector:/thingsplex/ecollector/data -e MQTT_URI=tcp://192.168.86.33:1884 -e MQTT_USERNAME=shurik -e MQTT_PASSWORD=molodec --network host --name ecollector thingsplex/ecollector:latest
+	docker run -d -v ecollector:/thingsplex/ecollector/data -e MQTT_URI=tcp://192.168.86.33:1884 -e MQTT_USERNAME=shurik -e MQTT_PASSWORD=molodec --network tplex-net --name ecollector thingsplex/ecollector:latest
 
 print-version :
 	@echo $(version)
