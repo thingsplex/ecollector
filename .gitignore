@@ -1,1 +1,6 @@
 .idea
+package/docker/build/
+package/tar/ecollector
+src/ecollector
+testdata/data/proc/
+src/meta_store.json
