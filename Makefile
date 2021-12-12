@@ -1,5 +1,4 @@
-version="0.8.6"
-#version:=$(shell git describe --tags --always | cut -c 2-)
+version="0.8.7"
 version_file=VERSION
 working_dir=$(shell pwd)
 arch="armhf"
@@ -16,13 +15,13 @@ build-go-arm:
 	cd ./src;GOOS=linux GOARCH=arm GOARM=6 go build -ldflags="-s -w -X main.Version=${version}" -o ecollector service.go;cd ../
 
 build-go-linux-amd64:
-	cd ./src;GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${version}" -o ecollector service.go;cd ../
+	cd ./src;GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.Version=${version}" -o ecollector service.go;cd ../
 
 build-go-mac-amd64:
-	cd ./src;GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${version}" -o ecollector service.go;cd ../
+	cd ./src;GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.Version=${version}" -o ecollector service.go;cd ../
 
 build-go-win-amd64:
-	cd ./src;GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${version}" -o ecollector service.go;cd ../
+	cd ./src;GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.Version=${version}" -o ecollector service.go;cd ../
 
 configure-arm:
 	python ./scripts/config_env.py prod $(version) armhf
@@ -78,10 +77,10 @@ tar-linux-amd64: clean build-go-linux-amd64 package-tar
 
 # Docker
 build-go-amd64:
-	cd ./src;GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${version}" -mod=vendor -o ../package/docker/build/amd64/ecollector service.go;cd ../
+	cd ./src;GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.Version=${version}" -mod=vendor -o ../package/docker/build/amd64/ecollector service.go;cd ../
 
 build-go-arm64:
-	cd ./src;GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X main.Version=${version}" -mod=vendor -o ../package/docker/build/arm64/ecollector service.go;cd ../
+	cd ./src;GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.Version=${version}" -mod=vendor -o ../package/docker/build/arm64/ecollector service.go;cd ../
 
 package-docker-local: build-go-amd64
 	docker build --build-arg TARGETARCH=amd64 -t thingsplex/ecollector:${version} -t thingsplex/ecollector:latest ./package/docker
