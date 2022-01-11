@@ -126,7 +126,7 @@ func (api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpg
 				if proc != nil {
 					switch op {
 					case "start":
-						err = proc.Start()
+						err = proc.Start(false)
 					case "stop":
 						err = proc.Stop()
 					case "delete":
@@ -355,11 +355,11 @@ func (api *AdminApi) onCommand(topic string, addr *fimpgo.Address, iotMsg *fimpg
 			case "retention_policy":
 				proc.Stop()
 				storage.DeleteRetentionPolicy(name)
-				proc.Start()
+				proc.Start(false)
 			case "database":
 				proc.Stop()
 				storage.DropDB(name)
-				proc.Start()
+				proc.Start(false)
 			case "cq":
 				storage.DeleteCQ(name)
 			case "measurement":

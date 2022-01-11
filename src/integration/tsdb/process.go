@@ -19,19 +19,20 @@ import (
 // Process implements integration flow between messaging system and influxdb timeseries database.
 // It inserts events into db
 type Process struct {
-	ID                 IDt
-	mqttTransport      *fimpgo.MqttTransport
-	Config             *ProcessConfig
-	storage            storage.DataStorage
-	batchPoints        map[string]influx.BatchPoints
-	ticker             *time.Ticker
-	writeMutex         *sync.Mutex
-	apiMutex           *sync.Mutex
-	transform          Transform
-	State              string
-	LastError          string
-	rawAggregator      *processing.DataPointAggregator
-	serviceMedataStore metadata.MetadataStore // metadata store is used for event enrichment
+	ID                     IDt
+	mqttTransport          *fimpgo.MqttTransport
+	Config                 *ProcessConfig
+	storage                storage.DataStorage
+	batchPoints            map[string]influx.BatchPoints
+	ticker                 *time.Ticker
+	writeMutex             *sync.Mutex
+	apiMutex               *sync.Mutex
+	transform              Transform
+	State                  string
+	LastError              string
+	rawAggregator          *processing.DataPointAggregator
+	isRawAggregatorRunning bool
+	serviceMedataStore     metadata.MetadataStore // metadata store is used for event enrichment
 }
 
 func (pr *Process) ServiceMedataStore() metadata.MetadataStore {
@@ -63,13 +64,13 @@ func (pr *Process) Init() error {
 	pr.State = ProcStateStarting
 	if pr.Config.StorageType == "" || pr.Config.StorageType == StorageTypeInfluxdb {
 		log.Info("<tsdb> Configuring influxDB data store")
-		pr.storage, err = storage.NewInfluxV1Storage(pr.Config.InfluxAddr, pr.Config.InfluxUsername, pr.Config.InfluxPassword, pr.Config.InfluxDB,pr.Config.Profile)
-	}else if pr.Config.StorageType == StorageTypeInfluxdbV2 {
+		pr.storage, err = storage.NewInfluxV1Storage(pr.Config.InfluxAddr, pr.Config.InfluxUsername, pr.Config.InfluxPassword, pr.Config.InfluxDB, pr.Config.Profile)
+	} else if pr.Config.StorageType == StorageTypeInfluxdbV2 {
 		log.Info("<tsdb> Configuring influxDBV2 data store")
-		pr.storage, err = storage.NewInfluxV2Storage(pr.Config.InfluxAddr, pr.Config.InfluxUsername, pr.Config.InfluxPassword, pr.Config.InfluxDB,pr.Config.Profile)
-	}else if pr.Config.StorageType == StorageTypeCsv {
+		pr.storage, err = storage.NewInfluxV2Storage(pr.Config.InfluxAddr, pr.Config.InfluxUsername, pr.Config.InfluxPassword, pr.Config.InfluxDB, pr.Config.Profile)
+	} else if pr.Config.StorageType == StorageTypeCsv {
 		log.Info("<tsdb> Configuring CSV data store")
-		pr.storage,err = storage.NewCsvStorage(pr.Config.StoragePath)
+		pr.storage, err = storage.NewCsvStorage(pr.Config.StoragePath)
 	}
 
 	if err != nil {
@@ -128,7 +129,7 @@ func (pr *Process) OnMessage(topic string, addr *fimpgo.Address, iotMsg *fimpgo.
 			log.Error("---PANIC----")
 			log.Errorf("OnMessage Err:%v", r)
 			trace := debug.Stack()
-			log.Errorf("%s",string(trace))
+			log.Errorf("%s", string(trace))
 			debug.PrintStack()
 		}
 	}()
@@ -189,6 +190,11 @@ func (pr *Process) OnMessage(topic string, addr *fimpgo.Address, iotMsg *fimpgo.
 }
 
 func (pr *Process) StartAggregatorWorker() {
+	if pr.isRawAggregatorRunning {
+		log.Info("Raw aggregator is already running , start operation is skipped")
+		return
+	}
+	pr.isRawAggregatorRunning = true
 	go func() {
 		for dp := range pr.rawAggregator.OutputChannel() {
 			log.Debug("<tsdb> New aggregator event")
@@ -203,6 +209,7 @@ func (pr *Process) StartAggregatorWorker() {
 			}
 		}
 		log.Error("<tsdb> Aggregator worker has QUIT")
+		pr.isRawAggregatorRunning = false
 	}()
 }
 
@@ -289,7 +296,7 @@ func (pr *Process) filter(context *MsgContext, topic string, iotMsg *fimpgo.Fimp
 // Write - writes data points into batch point
 func (pr *Process) Write(point *DataPoint) {
 	// log.Debugf("Point: %+v", point)
-	rpName := storage.ResolveWriteRetentionPolicyName(point.MeasurementName,pr.Config.Profile)
+	rpName := storage.ResolveWriteRetentionPolicyName(point.MeasurementName, pr.Config.Profile)
 	log.Debugf("<tsdb> pID = %d. Writing measurement: %s into %s", pr.ID, point.Point.Name(), rpName)
 	pr.writeMutex.Lock()
 	bp, ok := pr.batchPoints[rpName]
@@ -343,7 +350,7 @@ func (pr *Process) Configure(procConfig ProcessConfig, doRestart bool) error {
 	*pr.Config = procConfig
 	if doRestart {
 		pr.Stop()
-		return pr.Start()
+		return pr.Start(false)
 	}
 	return nil
 }
@@ -405,9 +412,6 @@ func (pr *Process) writeIntoDb() error {
 			err = pr.InitBatchPoint(bpKey)
 
 		} else {
-			if pr.State != ProcStateRunning {
-				pr.State = ProcStateRunning
-			}
 			err = pr.InitBatchPoint(bpKey)
 			if err != nil {
 				log.Error("<tsdb> Batch init error , batch is dropped: ", err)
@@ -429,17 +433,15 @@ func (pr *Process) writeIntoDb() error {
 
 // Start starts the process by starting MQTT adapter ,
 // starting scheduler
-func (pr *Process) Start() error {
+func (pr *Process) Start(autoRetry bool) error {
 	log.Info("<tsdb> Starting process...")
 	// try to initialize process first if current state is not INITIALIZED
-	if pr.State == ProcStateRunning || pr.State == ProcStateStarting {
+	if pr.State == ProcStateRunning || pr.State == ProcStateStarting || pr.State == ProcStateConnecting {
 		log.Info("<tsdb> Process already running or starting ")
 		return nil
 	}
-	if pr.State == ProcStateInitFailed || pr.State == ProcStateLoaded || pr.State == ProcStateInitializedWithErrors || pr.State == ProcStateStopped {
-		if err := pr.Init(); err != nil {
-			return err
-		}
+	if err := pr.Init(); err != nil {
+		return err
 	}
 	if pr.Config.SaveInterval < 1000 {
 		pr.Config.SaveInterval = 1000
@@ -453,24 +455,38 @@ func (pr *Process) Start() error {
 			pr.writeIntoDb()
 		}
 	}()
-	err := pr.mqttTransport.Start()
+	pr.State = ProcStateConnecting
+	var err error
+	if !autoRetry {
+		pr.mqttTransport.SetStartAutoRetryCount(2)
+		err = pr.mqttTransport.Start()
+		pr.mqttTransport.SetStartAutoRetryCount(10)
+	} else {
+		err = pr.mqttTransport.Start()
+	}
+
 	if err != nil {
-		log.Error("Error: ", err)
+		log.Errorf("Process %d reported connection error: %s", pr.ID, err.Error())
+		pr.State = ProcStateConnectionError
 		return err
 	}
 	for _, selector := range pr.Config.Selectors {
-		pr.mqttTransport.Subscribe(selector.Topic)
+		err := pr.mqttTransport.Subscribe(selector.Topic)
+		if err != nil {
+			log.Errorf("Process %d can't subscribe , error: %s", pr.ID, err.Error())
+			pr.State = ProcStateConnectionError
+			return err
+		}
 	}
 
 	if pr.serviceMedataStore == nil {
+		// TODO : Remove
 		pr.serviceMedataStore = metadata.NewVincMetadataStore(pr.mqttTransport)
 		pr.serviceMedataStore.Start()
 	}
-	if pr.State == ProcStateInitialized {
+	if pr.State == ProcStateInitialized || pr.State == ProcStateConnecting {
 		pr.State = ProcStateRunning
 	}
-	//pr.serviceMedataStore = metadata.NewTpMetadataStore(pr.mqttTransport)
-	//pr.serviceMedataStore.LoadFromTpRegistry()
 
 	log.Info("<tsdb> Process started. State = RUNNING ")
 	return nil
@@ -480,17 +496,23 @@ func (pr *Process) Start() error {
 // Stop stops the process by unsubscribing from all topics ,
 // stops scheduler and stops adapter.
 func (pr *Process) Stop() error {
-	if pr.State != ProcStateRunning {
+	if pr.State != ProcStateRunning && pr.State != ProcStateStarting {
 		return errors.New("process isn't running, nothing to stop")
 	}
 	log.Info("<tsdb> Stopping process...")
-	pr.ticker.Stop()
+	if pr.ticker != nil {
+		pr.ticker.Stop()
+	}
 	for _, selector := range pr.Config.Selectors {
 		pr.mqttTransport.Unsubscribe(selector.Topic)
 	}
-	pr.storage.Close()
-	pr.mqttTransport.Stop()
-	pr.State = "STOPPED"
+	if pr.storage != nil {
+		pr.storage.Close()
+	}
+	if pr.mqttTransport != nil {
+		pr.mqttTransport.Stop()
+	}
+	pr.State = ProcStateStopped
 	log.Info("<tsdb> Process stopped")
 	return nil
 }

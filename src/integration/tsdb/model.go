@@ -9,20 +9,19 @@ import (
 )
 
 const (
+	ProcStateInitFailed            = "INIT_FAILED"
+	ProcStateLoaded                = "LOADED"
+	ProcStateInitializedWithErrors = "INITIALIZED_WITH_ERRORS"
+	ProcStateStopped               = "STOPPED"
+	ProcStateRunning               = "RUNNING"
+	ProcStateStarting              = "STARTING"
+	ProcStateConnecting            = "CONNECTING"
+	ProcStateConnectionError       = "CONNECTION_ERROR"
+	ProcStateInitialized           = "INITIALIZED"
 
-    ProcStateInitFailed = "INIT_FAILED"
-    ProcStateLoaded = "LOADED"
-    ProcStateInitializedWithErrors = "INITIALIZED_WITH_ERRORS"
-    ProcStateStopped = "STOPPED"
-    ProcStateRunning = "RUNNING"
-    ProcStateStarting = "STARTING"
-    ProcStateInitialized = "INITIALIZED"
-
-	StorageTypeInfluxdb = "influxdb"
+	StorageTypeInfluxdb   = "influxdb"
 	StorageTypeInfluxdbV2 = "influxdbV2"
-	StorageTypeCsv      = "csv"
-
-
+	StorageTypeCsv        = "csv"
 )
 
 // Transform defines function which converts IotMsg into influx data point
@@ -94,16 +93,16 @@ type ProcessConfig struct {
 	// depends on what comes first .
 	BatchMaxSize int
 	// Interval in miliseconds
-	SaveInterval time.Duration
-	Filters      []Filter
-	Selectors    []Selector
-	Autostart    bool
-	InitDb       bool
-	SiteId       string
-	Profile      string // simple , optimized , raw
-	StoragePath  string
-	StorageType  string // influxdb,csv,parquet
-	MetadataStore string
+	SaveInterval        time.Duration
+	Filters             []Filter
+	Selectors           []Selector
+	Autostart           bool
+	InitDb              bool
+	SiteId              string
+	Profile             string // simple , optimized , raw
+	StoragePath         string
+	StorageType         string // influxdb,csv,parquet
+	MetadataStore       string
 	MetadataStoreConfig string
 }
 

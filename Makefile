@@ -110,7 +110,9 @@ publish-reprepo:
 	scp package/build/ecollector_$(version)_armhf.deb $(reprepo_host):~/apps
 
 run-docker:
-	docker run -d -v ecollector:/thingsplex/ecollector/data -e MQTT_URI=tcp://192.168.86.33:1884 -e MQTT_USERNAME=shurik -e MQTT_PASSWORD=molodec --network tplex-net --name ecollector thingsplex/ecollector:latest
+	docker run -d -v ecollector:/thingsplex/ecollector/data --restart unless-stopped \
+    -e MQTT_URI=tcp://192.168.86.33:1884 -e MQTT_USERNAME=uname -e MQTT_PASSWORD=pass \
+    --network tplex-net --name ecollector thingsplex/ecollector:latest
 
 print-version :
 	@echo $(version)

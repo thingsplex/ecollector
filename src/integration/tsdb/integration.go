@@ -87,7 +87,11 @@ func (it *Integration) SetConfig(processConfigs []ProcessConfig) {
 func (it *Integration) UpdateProcConfig(ID IDt, procConfig ProcessConfig, doRestart bool) error {
 	proc := it.GetProcessByID(ID)
 	// Updating process instance
-	err := proc.Configure(procConfig, doRestart)
+	// TODO : Stop existing process regarding of state
+	if doRestart {
+		proc.Stop()
+	}
+	err := proc.Configure(procConfig, false)
 	if err != nil {
 		return err
 	}
@@ -99,6 +103,13 @@ func (it *Integration) UpdateProcConfig(ID IDt, procConfig ProcessConfig, doRest
 		}
 	}
 	err = it.SaveConfigs()
+	if err != nil {
+		return err
+	}
+
+	if doRestart {
+		return proc.Start(false)
+	}
 	return err
 }
 
@@ -221,7 +232,7 @@ func (it *Integration) InitNewProcess(procConfig *ProcessConfig) error {
 		err := proc.Init()
 		if err == nil {
 			log.Infof("<boot> Process ID=%d was initialized.", procConfig.ID)
-			err := proc.Start()
+			err := proc.Start(true)
 			log.Infof("<boot> Process ID=%d is started.", procConfig.ID)
 			if err != nil {
 				log.Errorf("<boot> Process ID=%d failed to start . Error : %s", procConfig, err)
@@ -313,9 +324,6 @@ func Boot(mainConfig *model.Configs) *Integration {
 		log.Info("<tsdb> Config path path is not defined  ")
 		return nil
 	}
-	log.Info("<tsdb> Connected  ")
-	//hubDataUpdated := vincClient.InfraClient.RegisterMessageSubscriber()
-	//vincDb := vincClient.GetInfrastructure()
 	if mainConfig.DiskMonitorShutdownLimit == 0 {
 		mainConfig.DiskMonitorShutdownLimit = 85
 	}
@@ -331,8 +339,8 @@ func Boot(mainConfig *model.Configs) *Integration {
 	integr.Init()
 	log.Info("<tsdb> Loading configs  ")
 	integr.LoadConfig()
-	log.Info("<tsdb> Initializing processes ")
-	integr.InitProcesses()
+	log.Info("<tsdb> Initializing processes async ")
+	go integr.InitProcesses() // Runs in its own goroutine so that boot process doesn't block in case of incorrect configs
 	if !mainConfig.DisableDiskMonitor {
 		log.Info("<tsdb> Starting disk monitor ")
 		integr.StartDiskMonitor()
